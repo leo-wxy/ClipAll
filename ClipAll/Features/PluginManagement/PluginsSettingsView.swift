@@ -352,7 +352,7 @@ private struct PluginSettingsDetail: View {
                             "启用",
                             isOn: Binding(
                                 get: { managed?.state == .enabled },
-                                set: setEnabled
+                                set: { value in setEnabled(value) }
                             )
                         )
                         .toggleStyle(.switch)
