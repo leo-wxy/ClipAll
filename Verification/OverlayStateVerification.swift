@@ -37,6 +37,28 @@ enum OverlayStateVerification {
         )
         try expect(above.origin == CGPoint(x: 510, y: 48), "下方空间不足时应显示在选区上方")
 
+        let expandedBelow = OverlayPlacement.resizedFrame(
+            from: below,
+            panelSize: CGSize(width: 200, height: 240),
+            visibleFrame: visible,
+            attachmentEdge: OverlayPlacement.attachmentEdge(
+                for: below,
+                anchor: CGRect(x: 600, y: 400, width: 20, height: 20)
+            )
+        )
+        try expect(expandedBelow.maxY == below.maxY, "选区下方的浮层展开时应保持上边缘不动")
+
+        let expandedAbove = OverlayPlacement.resizedFrame(
+            from: above,
+            panelSize: CGSize(width: 200, height: 240),
+            visibleFrame: visible,
+            attachmentEdge: OverlayPlacement.attachmentEdge(
+                for: above,
+                anchor: CGRect(x: 600, y: 20, width: 20, height: 20)
+            )
+        )
+        try expect(expandedAbove.minY == above.minY, "选区上方的浮层展开时应保持下边缘不动")
+
         let secondary = CGRect(x: -1_280, y: -120, width: 1_280, height: 800)
         let clamped = OverlayPlacement.calculate(
             anchor: CGRect(x: -1_400, y: -100, width: 20, height: 20),

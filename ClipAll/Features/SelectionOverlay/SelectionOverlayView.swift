@@ -135,7 +135,7 @@ struct SelectionOverlayView: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(ClipAllTheme.accent)
                     .frame(width: 22, height: 22)
-                    .background(ClipAllTheme.accent.opacity(0.09), in: RoundedRectangle(cornerRadius: 6))
+                    .background(ClipAllTheme.accentSoft, in: RoundedRectangle(cornerRadius: 6))
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 5) {
@@ -182,7 +182,7 @@ struct SelectionOverlayView: View {
             }
             .padding(.horizontal, 9)
             .frame(height: 30)
-            .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
+            .background(ClipAllTheme.quietFill, in: RoundedRectangle(cornerRadius: 8))
 
             ScrollView {
                 LazyVStack(spacing: 3) {
@@ -283,7 +283,7 @@ struct SelectionOverlayView: View {
                     .help("复制 \(item.label)")
                 }
                 .padding(7)
-                .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 8))
+                .background(ClipAllTheme.quietFill, in: RoundedRectangle(cornerRadius: 8))
             }
         }
         .padding(9)
@@ -345,7 +345,7 @@ struct SelectionOverlayView: View {
     }
 
     private var cornerRadius: CGFloat {
-        isCollapsed ? 18 : 12
+        isCollapsed ? ClipAllTheme.Radius.overlayCollapsed : ClipAllTheme.Radius.overlayExpanded
     }
 
     private var overlaySurface: Color {

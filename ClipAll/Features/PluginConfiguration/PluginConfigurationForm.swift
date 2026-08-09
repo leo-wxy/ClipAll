@@ -11,7 +11,7 @@ struct PluginConfigurationForm: View {
             Text("这个插件没有配置项。")
                 .foregroundStyle(.secondary)
         } else {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: ClipAllTheme.Spacing.sm) {
                 ForEach(descriptor.configurationFields) { field in
                     if configurationStore.isVisible(field, pluginID: descriptor.id) {
                         fieldView(field)
@@ -34,11 +34,12 @@ struct PluginConfigurationForm: View {
                 .pickerStyle(.menu)
             case .toggle:
                 Toggle(field.title, isOn: boolBinding(field))
+                    .toggleStyle(.switch)
             case let .text(placeholder):
                 LabeledContent(field.title) {
                     TextField(placeholder ?? "", text: stringBinding(field))
                         .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 360)
+                        .frame(maxWidth: 320)
                 }
             case let .secret(placeholder):
                 SecretConfigurationField(
@@ -119,7 +120,7 @@ private struct SecretConfigurationField: View {
                 HStack {
                     SecureField(model.isStored ? "已设置，输入新值可替换" : (placeholder ?? ""), text: $model.value)
                         .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 280)
+                        .frame(maxWidth: 220)
                     Button("保存") { model.save() }
                         .disabled(model.value.isEmpty)
                     if model.isStored {

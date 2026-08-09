@@ -17,13 +17,14 @@ struct ClipAllApp: App {
         Window("能力中心", id: "capability-center") {
             CapabilityCenterView(environment: environment)
         }
-        .defaultSize(width: 900, height: 620)
+        .defaultSize(width: 860, height: 580)
         .windowResizability(.contentMinSize)
-        .windowStyle(.hiddenTitleBar)
 
         Settings {
             SettingsRootView(environment: environment)
         }
+        .defaultSize(width: 920, height: 620)
+        .windowResizability(.contentMinSize)
     }
 }
 
@@ -37,7 +38,7 @@ private struct MenuBarStatusIcon: View {
                     .renderingMode(.template)
             } else {
                 Image(systemName: "text.cursor")
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.system(size: 15.3, weight: .bold))
             }
         }
         .opacity(settings.isMonitoringEnabled ? 1 : 0.45)
@@ -53,7 +54,7 @@ private struct MenuBarStatusIcon: View {
             return nil
         }
         image.isTemplate = true
-        image.size = NSSize(width: 27, height: 16)
+        image.size = NSSize(width: 24.3, height: 14.4)
         return image
     }
 }
@@ -62,6 +63,7 @@ private struct MenuBarContent: View {
     let environment: AppEnvironment
     @ObservedObject private var settings: SettingsStore
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     init(environment: AppEnvironment) {
         self.environment = environment
@@ -78,13 +80,13 @@ private struct MenuBarContent: View {
         Divider()
 
         Button("能力中心…") {
-            openWindow(id: "capability-center")
             NSApplication.shared.activate(ignoringOtherApps: true)
+            openWindow(id: "capability-center")
         }
         .keyboardShortcut("k", modifiers: [.command, .shift])
 
-        SettingsLink {
-            Text("设置…")
+        Button("设置…") {
+            bringSettingsToFront()
         }
         .keyboardShortcut(",", modifiers: .command)
 
@@ -101,5 +103,13 @@ private struct MenuBarContent: View {
             get: { settings.isMonitoringEnabled },
             set: { settings.isMonitoringEnabled = $0 }
         )
+    }
+
+    private func bringSettingsToFront() {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        openSettings()
+        DispatchQueue.main.async {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
     }
 }

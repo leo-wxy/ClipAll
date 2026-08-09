@@ -1,51 +1,49 @@
-# Quality Guidelines
+# Frontend Quality Guidelines
 
-> Code quality standards for frontend development.
+## Required Checks
 
----
+- `swift build --target ClipAll` must compile the full application module.
+- `Scripts/verify-overlay-state.sh` must pass for every overlay geometry change.
+- Light and dark appearances require a screenshot of the installed Applications
+  copy when shared colors, surfaces, or window chrome change.
+- Pointer hover, pressed state, keyboard focus, and non-color status text must be
+  checked for every new interactive row.
 
-## Overview
+## Selection Overlay Contract
 
-<!--
-Document your project's quality standards here.
+- The overlay width is fixed at 324 points in compact and expanded states.
+- Ordinary mode stays a non-activating `NSPanel`; only the search state accepts
+  keyboard input.
+- Initial placement is selection-bounds first and pointer fallback second.
+- Resizing preserves the edge nearest the selection: a panel below the selection
+  preserves `maxY`; a panel above it preserves `minY`.
+- Copy success dismisses immediately. New visual animation must not delay the
+  store's dismissal or intercept source-app key events.
 
-Questions to answer:
-- What patterns are forbidden?
-- What linting rules do you enforce?
-- What are your testing requirements?
-- What code review standards apply?
--->
+```swift
+let edge = OverlayPlacement.attachmentEdge(for: frame, anchor: anchor)
+let resized = OverlayPlacement.resizedFrame(
+    from: frame,
+    panelSize: newSize,
+    visibleFrame: screen.visibleFrame,
+    attachmentEdge: edge
+)
+```
 
-(To be filled by the team)
+## Good / Base / Bad Cases
 
----
+- Good: expanding below a selection keeps the panel top edge fixed and does not
+  cover the selected text.
+- Base: a new selection context recomputes its screen and placement.
+- Bad: deriving every state from `fittingSize.width`, which makes the toolbar jump
+  horizontally.
+- Bad: observing ordinary `keyDown` events and returning a modified event; this
+  can duplicate source-app text input.
 
-## Forbidden Patterns
+## Review Checklist
 
-<!-- Patterns that should never be used and why -->
-
-(To be filled by the team)
-
----
-
-## Required Patterns
-
-<!-- Patterns that must always be used -->
-
-(To be filled by the team)
-
----
-
-## Testing Requirements
-
-<!-- What level of testing is expected -->
-
-(To be filled by the team)
-
----
-
-## Code Review Checklist
-
-<!-- What reviewers should check -->
-
-(To be filled by the team)
+- No unscoped `WindowGroup` in the menu-bar app.
+- No global window-style mutation in `AppDelegate`.
+- No fixed light-only surface or saturated accent in feature views.
+- No launch of `.build/ClipAll.app`; `.build` is an intermediate bundle only.
+- Geometry behavior has numeric assertions, not screenshot-only coverage.

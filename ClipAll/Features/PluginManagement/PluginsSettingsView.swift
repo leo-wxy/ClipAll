@@ -26,12 +26,17 @@ struct PluginsSettingsView: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("\(pluginDescriptors.count) 个插件")
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 6)
+                HStack {
+                    Text("插件")
+                        .font(.headline)
+                    Spacer()
+                    Text("\(pluginDescriptors.count)")
+                        .font(.caption.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 4)
 
                 ScrollView {
                     LazyVStack(spacing: 6) {
@@ -45,7 +50,11 @@ struct PluginsSettingsView: View {
                                     isSelected: model.selectedPluginID == descriptor.id
                                 )
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(
+                                ClipAllSelectableRowStyle(
+                                    isSelected: model.selectedPluginID == descriptor.id
+                                )
+                            )
                             .accessibilityAddTraits(
                                 model.selectedPluginID == descriptor.id ? .isSelected : []
                             )
@@ -99,12 +108,15 @@ struct PluginsSettingsView: View {
                     Label("导入插件", systemImage: "plus")
                         .frame(maxWidth: .infinity)
                 }
-                .controlSize(.large)
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
             }
-            .padding(14)
-            .frame(width: 270)
+            .padding(ClipAllTheme.Spacing.sm)
+            .frame(width: ClipAllTheme.Size.pluginList)
             .frame(maxHeight: .infinity)
-            .clipAllSurface()
+            .background(ClipAllTheme.sidebar)
+
+            Divider()
 
             if let descriptor = selectedDescriptor {
                 PluginSettingsDetail(
@@ -115,7 +127,6 @@ struct PluginsSettingsView: View {
                         model.uninstallTarget = lifecycle.plugin(id: descriptor.id)
                     }
                 )
-                .clipAllSurface()
             } else {
                 ContentUnavailableView(
                     "选择一个插件",
@@ -123,11 +134,9 @@ struct PluginsSettingsView: View {
                     description: Text("查看能力、配置和安装状态。")
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipAllSurface()
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.bottom, 24)
+        .background(ClipAllTheme.canvas)
         .task {
             await environment.start()
             if model.selectedPluginID == nil { model.selectedPluginID = pluginDescriptors.first?.id }
@@ -261,11 +270,11 @@ private struct PluginListRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: descriptor.symbolName)
-                .font(.system(size: 16, weight: .medium))
-                .frame(width: 34, height: 34)
-                .background(ClipAllTheme.quietFill, in: Circle())
-                .foregroundStyle(isSelected ? ClipAllTheme.accent : .secondary)
+            ClipAllIconBadge(
+                symbolName: descriptor.symbolName,
+                size: ClipAllTheme.Size.iconSmall,
+                tone: isSelected ? .accent : .neutral
+            )
             VStack(alignment: .leading, spacing: 2) {
                 Text(descriptor.name)
                     .fontWeight(.medium)
@@ -281,20 +290,9 @@ private struct PluginListRow: View {
                     .accessibilityLabel("已停用")
             }
         }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 9)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(isSelected ? ClipAllTheme.accent.opacity(0.085) : Color.clear)
-        }
-        .overlay(alignment: .leading) {
-            if isSelected {
-                Capsule()
-                    .fill(ClipAllTheme.accent)
-                    .frame(width: 2.5, height: 28)
-            }
-        }
     }
 
     private var status: String {
@@ -330,22 +328,22 @@ private struct PluginSettingsDetail: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: ClipAllTheme.Spacing.md) {
                 HStack(alignment: .top, spacing: 14) {
-                    Image(systemName: descriptor.symbolName)
-                        .font(.system(size: 24, weight: .medium))
-                        .foregroundStyle(ClipAllTheme.accent)
-                        .frame(width: 52, height: 52)
-                        .background(ClipAllTheme.accent.opacity(0.07), in: Circle())
-                        .overlay { Circle().stroke(ClipAllTheme.border) }
+                    ClipAllIconBadge(
+                        symbolName: descriptor.symbolName,
+                        size: ClipAllTheme.Size.iconLarge
+                    )
                     VStack(alignment: .leading, spacing: 3) {
                         Text(descriptor.name)
-                            .font(.title2.weight(.semibold))
+                            .font(.title3.weight(.semibold))
                         Text(descriptor.summary)
+                            .font(.callout)
                             .foregroundStyle(.secondary)
+                            .lineLimit(2)
                         Text("\(sourceLabel) · v\(descriptor.version)")
                             .font(.caption)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                     }
                     Spacer()
 
@@ -367,13 +365,14 @@ private struct PluginSettingsDetail: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Text("能力")
                         .font(.headline)
-                        .padding(.bottom, 8)
+                        .padding(.bottom, 5)
                     ForEach(Array(capabilities.enumerated()), id: \.element.id) { index, capability in
                         HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: capability.symbolName)
-                                .font(.system(size: 15, weight: .medium))
-                                .frame(width: 34, height: 34)
-                                .background(ClipAllTheme.quietFill, in: RoundedRectangle(cornerRadius: 9))
+                            ClipAllIconBadge(
+                                symbolName: capability.symbolName,
+                                size: ClipAllTheme.Size.iconSmall,
+                                tone: .neutral
+                            )
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(capability.name)
                                     .fontWeight(.medium)
@@ -383,7 +382,7 @@ private struct PluginSettingsDetail: View {
                             }
                             Spacer()
                         }
-                        .padding(.vertical, 10)
+                        .padding(.vertical, 8)
                         if index < capabilities.count - 1 { Divider() }
                     }
                 }
@@ -398,15 +397,8 @@ private struct PluginSettingsDetail: View {
                             configurationStore: environment.configuration,
                             secretStore: environment.secrets
                         )
-                        .padding(14)
-                        .background(
-                            ClipAllTheme.quietFill,
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        )
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(ClipAllTheme.border)
-                        }
+                        .padding(ClipAllTheme.Spacing.sm)
+                        .clipAllInset()
                     }
                 }
 
@@ -421,7 +413,8 @@ private struct PluginSettingsDetail: View {
                     }
                 }
             }
-            .padding(24)
+            .padding(ClipAllTheme.Spacing.lg)
+            .frame(maxWidth: 720, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

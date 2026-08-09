@@ -7,55 +7,60 @@ struct GeneralSettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 12) {
-                settingsBlock(title: "取词") {
-                    Toggle("自动监听文字选择", isOn: monitoringBinding)
-                    Text("关闭后不会自动弹出取词面板，能力中心和设置仍然可用。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            VStack(spacing: ClipAllTheme.Spacing.sm) {
+                ClipAllSectionCard(
+                    "取词",
+                    subtitle: "控制是否在选择文字后自动显示操作栏。"
+                ) {
+                    HStack(alignment: .center, spacing: ClipAllTheme.Spacing.md) {
+                        Label("自动监听文字选择", systemImage: "selection.pin.in.out")
+                            .fontWeight(.medium)
+                        Spacer()
+                        Toggle("", isOn: monitoringBinding)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .fixedSize()
+                    }
                 }
 
-                settingsBlock(title: "全局快捷键") {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("显示取词面板")
-                                .fontWeight(.medium)
-                            Text("在任意 App 中主动唤起当前选中文字。")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                ClipAllSectionCard(
+                    "全局快捷键",
+                    subtitle: "在任意 App 中主动读取当前选中文字。"
+                ) {
+                    HStack(spacing: ClipAllTheme.Spacing.sm) {
+                        Text("显示取词浮窗")
+                            .fontWeight(.medium)
                         Spacer()
                         Text(shortcutLabel)
-                            .font(.system(.body, design: .rounded).weight(.semibold))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(ClipAllTheme.quietFill, in: RoundedRectangle(cornerRadius: 7))
+                            .font(.system(.callout, design: .rounded).weight(.semibold))
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .clipAllInset(cornerRadius: ClipAllTheme.Radius.control)
                         Button("恢复默认") { settings.globalShortcut = .standard }
                     }
                 }
 
-                settingsBlock(title: "辅助功能权限") {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Label(
-                                permissionStatusText,
-                                systemImage: permissions.isTrusted
-                                    ? "checkmark.circle.fill"
-                                    : "exclamationmark.triangle.fill"
-                            )
-                            .fontWeight(.medium)
-                            .foregroundStyle(
-                                permissions.isTrusted ? Color.green : ClipAllTheme.accent
-                            )
-                            Text("ClipAll 只用该权限读取当前选中文字和选区位置。")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
+                ClipAllSectionCard(
+                    "辅助功能权限",
+                    subtitle: "只用于读取当前选中文字和选区位置。"
+                ) {
+                    HStack(alignment: .center, spacing: ClipAllTheme.Spacing.sm) {
+                        Label(
+                            permissionStatusText,
+                            systemImage: permissions.isTrusted
+                                ? "checkmark.circle.fill"
+                                : "exclamationmark.triangle.fill"
+                        )
+                        .fontWeight(.medium)
+                        .foregroundStyle(permissions.isTrusted ? Color.green : ClipAllTheme.accent)
+
                         if permissions.isAwaitingAuthorization, !permissions.isTrusted {
                             ProgressView()
                                 .controlSize(.small)
                         }
+
+                        Spacer()
+
                         Button(permissions.isTrusted ? "重新检查" : "请求权限…") {
                             if permissions.isTrusted {
                                 permissions.refresh()
@@ -63,30 +68,19 @@ struct GeneralSettingsView: View {
                                 permissions.requestPermission()
                             }
                         }
+                        .disabled(permissions.isAwaitingAuthorization && !permissions.isTrusted)
+
                         Button("打开系统设置") { permissions.openSystemSettings() }
                     }
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 24)
+            .frame(maxWidth: 680)
+            .padding(ClipAllTheme.Spacing.lg)
+            .frame(maxWidth: .infinity)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             permissions.refresh()
         }
-    }
-
-    private func settingsBlock<Content: View>(
-        title: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.headline)
-            content()
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .clipAllSurface()
     }
 
     private var monitoringBinding: Binding<Bool> {

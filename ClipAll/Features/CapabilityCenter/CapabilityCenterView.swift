@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import SwiftUI
 
@@ -13,6 +14,7 @@ struct CapabilityCenterView: View {
     @ObservedObject private var registry: CapabilityRegistry
     @ObservedObject private var settings: SettingsStore
     @StateObject private var model = CapabilityCenterViewModel()
+    @Environment(\.openSettings) private var openSettings
 
     init(environment: AppEnvironment) {
         self.environment = environment
@@ -21,44 +23,70 @@ struct CapabilityCenterView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .bottom) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("能力中心")
-                        .font(.system(size: 24, weight: .bold))
-                    Text("浏览所有可用操作，并决定哪些显示在取词面板。")
-                        .font(.callout)
+        NavigationSplitView {
+            VStack(spacing: 0) {
+                HStack(spacing: 7) {
+                    Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
+                    TextField("搜索能力或插件", text: $model.query)
+                        .textFieldStyle(.plain)
                 }
-                Spacer()
-                SettingsLink {
-                    Label("打开设置", systemImage: "gearshape")
+                .padding(.horizontal, 9)
+                .frame(height: 30)
+                .clipAllInset(cornerRadius: ClipAllTheme.Radius.control)
+                .padding(ClipAllTheme.Spacing.sm)
+
+                Divider()
+
+                List(selection: $model.selectedCapabilityID) {
+                    Section("\(filteredDescriptors.count) 个能力") {
+                        ForEach(filteredDescriptors) { descriptor in
+                            capabilityRow(descriptor)
+                                .tag(descriptor.id)
+                        }
+                    }
                 }
+                .listStyle(.sidebar)
             }
-
-            HStack(spacing: 12) {
-                capabilityList
-                    .frame(width: 300)
-                    .clipAllSurface()
-
+            .navigationTitle("能力")
+            .navigationSplitViewColumnWidth(
+                min: 220,
+                ideal: ClipAllTheme.Size.capabilityList,
+                max: 280
+            )
+        } detail: {
+            Group {
                 if let descriptor = selectedDescriptor {
                     capabilityDetail(descriptor)
-                        .clipAllSurface()
-                } else {
+                } else if model.query.isEmpty {
                     ContentUnavailableView(
                         "选择一个能力",
                         systemImage: "sparkles",
                         description: Text("查看用途、示例和来源插件。")
                     )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipAllSurface()
+                } else {
+                    ContentUnavailableView(
+                        "没有匹配的能力",
+                        systemImage: "magnifyingglass",
+                        description: Text("尝试搜索能力名称、用途或插件名称。")
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(ClipAllTheme.canvas)
+        }
+        .navigationSplitViewStyle(.balanced)
+        .frame(minWidth: 760, minHeight: 500)
+        .tint(ClipAllTheme.accent)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    bringSettingsToFront()
+                } label: {
+                    Label("设置", systemImage: "gearshape")
                 }
             }
         }
-        .padding(24)
-        .frame(minWidth: 820, minHeight: 560)
-        .background(ClipAllTheme.canvas)
-        .tint(ClipAllTheme.accent)
         .task {
             await environment.start()
             reconcileSelection()
@@ -68,67 +96,40 @@ struct CapabilityCenterView: View {
         }
     }
 
-    private var capabilityList: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            TextField("搜索能力或插件", text: $model.query)
-                .textFieldStyle(.roundedBorder)
-
-            Text("\(filteredDescriptors.count) 个能力")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-
-            ScrollView {
-                LazyVStack(spacing: 6) {
-                    ForEach(filteredDescriptors) { descriptor in
-                        Button {
-                            model.selectedCapabilityID = descriptor.id
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: descriptor.symbolName)
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundStyle(
-                                        model.selectedCapabilityID == descriptor.id
-                                            ? ClipAllTheme.accent
-                                            : .secondary
-                                    )
-                                    .frame(width: 32, height: 32)
-                                    .background(ClipAllTheme.quietFill, in: Circle())
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(descriptor.name)
-                                        .fontWeight(.medium)
-                                    Text(pluginName(for: descriptor))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                            }
-                            .padding(10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background {
-                                if model.selectedCapabilityID == descriptor.id {
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .fill(ClipAllTheme.accent.opacity(0.08))
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+    private func capabilityRow(_ descriptor: CapabilityDescriptor) -> some View {
+        HStack(spacing: 9) {
+            ClipAllIconBadge(
+                symbolName: descriptor.symbolName,
+                size: ClipAllTheme.Size.iconSmall,
+                tone: model.selectedCapabilityID == descriptor.id ? .accent : .neutral
+            )
+            VStack(alignment: .leading, spacing: 1) {
+                Text(descriptor.name)
+                    .fontWeight(.medium)
+                Text(pluginName(for: descriptor))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if settings.pinnedCapabilityIDs.contains(descriptor.id) {
+                Image(systemName: "pin.fill")
+                    .font(.caption)
+                    .foregroundStyle(ClipAllTheme.accent)
+                    .accessibilityLabel("已固定")
             }
         }
-        .padding(14)
-        .frame(maxHeight: .infinity, alignment: .top)
+        .padding(.vertical, 3)
+        .accessibilityElement(children: .combine)
     }
 
     private func capabilityDetail(_ descriptor: CapabilityDescriptor) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                HStack(alignment: .top, spacing: 14) {
-                    Image(systemName: descriptor.symbolName)
-                        .font(.system(size: 22, weight: .medium))
-                        .foregroundStyle(ClipAllTheme.accent)
-                        .frame(width: 48, height: 48)
-                        .background(ClipAllTheme.accent.opacity(0.07), in: Circle())
+            VStack(alignment: .leading, spacing: ClipAllTheme.Spacing.lg) {
+                HStack(alignment: .top, spacing: ClipAllTheme.Spacing.sm) {
+                    ClipAllIconBadge(
+                        symbolName: descriptor.symbolName,
+                        size: ClipAllTheme.Size.iconLarge
+                    )
                     VStack(alignment: .leading, spacing: 3) {
                         Text(descriptor.name)
                             .font(.title2.weight(.semibold))
@@ -136,7 +137,7 @@ struct CapabilityCenterView: View {
                             .foregroundStyle(.secondary)
                         Text(pluginName(for: descriptor))
                             .font(.caption)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                     }
                     Spacer()
                     Toggle("固定到操作栏", isOn: pinBinding(descriptor.id))
@@ -151,7 +152,7 @@ struct CapabilityCenterView: View {
 
                 Divider()
 
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 9) {
                     Text("适用内容")
                         .font(.headline)
                     Text(descriptor.supportedContentKinds.map(contentKindName).sorted().joined(separator: "、"))
@@ -159,7 +160,7 @@ struct CapabilityCenterView: View {
                 }
 
                 if !descriptor.examples.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 9) {
                         Text("示例")
                             .font(.headline)
                         ForEach(descriptor.examples, id: \.self) { example in
@@ -168,10 +169,7 @@ struct CapabilityCenterView: View {
                                 .textSelection(.enabled)
                                 .padding(10)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(
-                                    ClipAllTheme.quietFill,
-                                    in: RoundedRectangle(cornerRadius: 9)
-                                )
+                                .clipAllInset()
                         }
                     }
                 }
@@ -179,15 +177,18 @@ struct CapabilityCenterView: View {
                 if let plugin = registry.plugin(for: descriptor.pluginID),
                    !plugin.configurationFields.isEmpty {
                     Divider()
-                    SettingsLink {
+                    Button {
+                        bringSettingsToFront()
+                    } label: {
                         Label("在设置中配置“\(plugin.name)”", systemImage: "slider.horizontal.3")
                     }
                 }
             }
-            .padding(22)
+            .padding(ClipAllTheme.Spacing.xl)
+            .frame(maxWidth: 720, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .navigationTitle("能力中心")
     }
 
     private var filteredDescriptors: [CapabilityDescriptor] {
@@ -218,6 +219,14 @@ struct CapabilityCenterView: View {
             get: { settings.pinnedCapabilityIDs.contains(id) },
             set: { _ = settings.setPinned(id, isPinned: $0) }
         )
+    }
+
+    private func bringSettingsToFront() {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        openSettings()
+        DispatchQueue.main.async {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
     }
 
     private func pluginName(for descriptor: CapabilityDescriptor) -> String {

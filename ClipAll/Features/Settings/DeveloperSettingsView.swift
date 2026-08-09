@@ -28,7 +28,7 @@ struct DeveloperSettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 12) {
+            VStack(spacing: ClipAllTheme.Spacing.sm) {
                 developerModePanel
 
                 if settings.isDeveloperModeEnabled {
@@ -36,8 +36,9 @@ struct DeveloperSettingsView: View {
                     if !lifecycle.invalidPlugins.isEmpty { diagnosticsPanel }
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 24)
+            .frame(maxWidth: 720)
+            .padding(ClipAllTheme.Spacing.lg)
+            .frame(maxWidth: .infinity)
         }
         .sheet(item: $model.debugger) { presentation in
             PluginDebuggerView(
@@ -60,45 +61,38 @@ struct DeveloperSettingsView: View {
     }
 
     private var developerModePanel: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: "chevron.left.forwardslash.chevron.right")
-                .font(.system(size: 20, weight: .medium))
-                .foregroundStyle(ClipAllTheme.accent)
-                .frame(width: 42, height: 42)
-                .background(ClipAllTheme.accent.opacity(0.07), in: Circle())
-            VStack(alignment: .leading, spacing: 4) {
-                Text("开发者模式")
-                    .font(.headline)
-                Text("直接引用源码目录进行重新载入和调试。关闭后引用会保留，但不会继续载入。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Toggle(
-                "启用",
-                isOn: Binding(
-                    get: { settings.isDeveloperModeEnabled },
-                    set: { lifecycle.setDeveloperModeEnabled($0) }
+        ClipAllSectionCard(
+            "开发者模式",
+            subtitle: "直接引用源码目录；关闭后保留引用，但不继续载入。"
+        ) {
+            HStack(spacing: ClipAllTheme.Spacing.sm) {
+                ClipAllIconBadge(
+                    symbolName: "chevron.left.forwardslash.chevron.right",
+                    size: ClipAllTheme.Size.iconMedium
                 )
-            )
-            .toggleStyle(.switch)
-            .fixedSize()
+                Text(settings.isDeveloperModeEnabled ? "已启用" : "未启用")
+                    .fontWeight(.medium)
+                Spacer()
+                Toggle(
+                    "启用",
+                    isOn: Binding(
+                        get: { settings.isDeveloperModeEnabled },
+                        set: { lifecycle.setDeveloperModeEnabled($0) }
+                    )
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .fixedSize()
+            }
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .clipAllSurface()
     }
 
     private var developmentPluginsPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        ClipAllSectionCard(
+            "开发引用",
+            subtitle: "移除引用不会删除插件源码。"
+        ) {
             HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("开发引用")
-                        .font(.headline)
-                    Text("移除引用不会删除插件源码。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
                 Spacer()
                 Button("载入未打包插件…") { chooseDevelopmentPlugin() }
             }
@@ -113,22 +107,19 @@ struct DeveloperSettingsView: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(developmentPlugins.enumerated()), id: \.element.id) { index, plugin in
-                        developmentPluginRow(plugin)
+                        ClipAllHoverRow { developmentPluginRow(plugin) }
                         if index < developmentPlugins.count - 1 { Divider() }
                     }
                 }
             }
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .clipAllSurface()
     }
 
     private var diagnosticsPanel: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("载入诊断", systemImage: "exclamationmark.triangle")
-                .font(.headline)
-                .foregroundStyle(ClipAllTheme.accent)
+        ClipAllSectionCard(
+            "载入诊断",
+            subtitle: "以下插件未能通过校验或载入。"
+        ) {
             ForEach(lifecycle.invalidPlugins) { invalid in
                 VStack(alignment: .leading, spacing: 3) {
                     Text(invalid.packageURL.lastPathComponent)
@@ -140,16 +131,13 @@ struct DeveloperSettingsView: View {
                     if let location = invalid.issue.location, !location.isEmpty {
                         Text(location)
                             .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                             .textSelection(.enabled)
                     }
                 }
                 .padding(.vertical, 5)
             }
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .clipAllSurface()
     }
 
     private var developmentPlugins: [ManagedPlugin] {
@@ -161,10 +149,10 @@ struct DeveloperSettingsView: View {
     private func developmentPluginRow(_ plugin: ManagedPlugin) -> some View {
         let descriptor = plugin.package.definition.descriptor
         return HStack(spacing: 12) {
-            Image(systemName: descriptor.symbolName)
-                .foregroundStyle(ClipAllTheme.accent)
-                .frame(width: 34, height: 34)
-                .background(ClipAllTheme.quietFill, in: Circle())
+            ClipAllIconBadge(
+                symbolName: descriptor.symbolName,
+                size: ClipAllTheme.Size.iconSmall
+            )
             VStack(alignment: .leading, spacing: 2) {
                 Text(descriptor.name)
                     .fontWeight(.medium)
@@ -181,7 +169,6 @@ struct DeveloperSettingsView: View {
                 .buttonStyle(.borderedProminent)
             Button("移除引用", role: .destructive) { removeReference(plugin.id) }
         }
-        .padding(.vertical, 10)
     }
 
     private func chooseDevelopmentPlugin() {

@@ -12,23 +12,22 @@ struct PluginDebuggerView: View {
             Divider()
             HSplitView {
                 inputPane
-                    .frame(minWidth: 360, idealWidth: 430)
+                    .frame(minWidth: 330, idealWidth: 390)
                 resultPane
-                    .frame(minWidth: 440, idealWidth: 520)
+                    .frame(minWidth: 400, idealWidth: 470)
             }
         }
-        .frame(minWidth: 900, minHeight: 620)
+        .frame(minWidth: 820, minHeight: 560)
         .background(ClipAllTheme.canvas)
         .tint(ClipAllTheme.accent)
     }
 
     private var debuggerHeader: some View {
         HStack(spacing: 12) {
-            Image(systemName: "ladybug")
-                .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(ClipAllTheme.accent)
-                .frame(width: 38, height: 38)
-                .background(ClipAllTheme.accent.opacity(0.07), in: Circle())
+            ClipAllIconBadge(
+                symbolName: "ladybug",
+                size: ClipAllTheme.Size.iconMedium
+            )
             VStack(alignment: .leading, spacing: 2) {
                 Text("插件调试器")
                     .font(.headline)
@@ -53,7 +52,7 @@ struct PluginDebuggerView: View {
             .keyboardShortcut(.return, modifiers: .command)
             .disabled(session.isRunning)
         }
-        .padding(16)
+        .padding(ClipAllTheme.Spacing.sm)
     }
 
     private var inputPane: some View {
@@ -74,11 +73,8 @@ struct PluginDebuggerView: View {
                             configurationStore: configurationStore,
                             secretStore: secretStore
                         )
-                        .padding(12)
-                        .background(
-                            ClipAllTheme.quietFill,
-                            in: RoundedRectangle(cornerRadius: 10)
-                        )
+                        .padding(ClipAllTheme.Spacing.sm)
+                        .clipAllInset()
                     }
                 }
 
@@ -91,7 +87,7 @@ struct PluginDebuggerView: View {
                         .padding(8)
                         .background(ClipAllTheme.surface)
                         .overlay {
-                            RoundedRectangle(cornerRadius: 10)
+                            RoundedRectangle(cornerRadius: ClipAllTheme.Radius.row)
                                 .stroke(ClipAllTheme.border)
                         }
                         .onChange(of: session.input) { _, _ in session.analyze() }
@@ -132,15 +128,12 @@ struct PluginDebuggerView: View {
                                     .font(.system(.caption, design: .monospaced).weight(.semibold))
                             }
                             .padding(10)
-                            .background(
-                                ClipAllTheme.quietFill,
-                                in: RoundedRectangle(cornerRadius: 9)
-                            )
+                            .clipAllInset()
                         }
                     }
                 }
             }
-            .padding(18)
+            .padding(ClipAllTheme.Spacing.md)
         }
         .background(ClipAllTheme.sidebar)
     }
@@ -194,10 +187,7 @@ struct PluginDebuggerView: View {
                                 }
                                 .padding(10)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(
-                                    ClipAllTheme.quietFill,
-                                    in: RoundedRectangle(cornerRadius: 9)
-                                )
+                                .clipAllInset()
                             }
                         }
                     }
@@ -233,7 +223,7 @@ struct PluginDebuggerView: View {
                     }
                 }
             }
-            .padding(18)
+            .padding(ClipAllTheme.Spacing.md)
         }
     }
 
@@ -252,8 +242,8 @@ struct PluginDebuggerView: View {
                 .font(.headline)
             content()
         }
-        .padding(14)
+        .padding(ClipAllTheme.Spacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .clipAllSurface(cornerRadius: 12)
+        .clipAllInset()
     }
 }

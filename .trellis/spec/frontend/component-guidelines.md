@@ -1,59 +1,69 @@
-# Component Guidelines
+# SwiftUI Component Guidelines
 
-> How components are built in this project.
+## Scope
 
----
+ClipAll is a native macOS SwiftUI application. Feature views live under
+`ClipAll/Features`, while reusable visual primitives live in
+`ClipAll/SharedUI/ClipAllTheme.swift`.
 
-## Overview
+## Window And Navigation Structure
 
-<!--
-Document your project's component conventions here.
+- Use native `NavigationSplitView` and sidebar `List(selection:)` for settings
+  and browsing windows.
+- Keep `Settings` and singleton `Window(id:)` scenes. Do not add an unscoped
+  `WindowGroup` to the menu-bar accessory app; it creates restorable duplicate
+  windows.
+- Do not globally rewrite every `NSWindow` from `AppDelegate`. Window chrome is
+  owned by the corresponding SwiftUI scene.
+- A menu action that opens a window must activate the accessory app before the
+  open action and again on the next main-queue turn.
 
-Questions to answer:
-- What component patterns do you use?
-- How are props defined?
-- How do you handle composition?
-- What accessibility standards apply?
--->
+```swift
+NSApplication.shared.activate(ignoringOtherApps: true)
+openSettings()
+DispatchQueue.main.async {
+    NSApplication.shared.activate(ignoringOtherApps: true)
+}
+```
 
-(To be filled by the team)
+## Shared Visual Primitives
 
----
+Use semantic values from `ClipAllTheme`; do not introduce feature-local orange,
+card shadow, selection fill, or common spacing constants.
 
-## Component Structure
+```swift
+ClipAllSectionCard("辅助功能权限", subtitle: "只用于读取当前选区。") {
+    content
+}
 
-<!-- Standard structure of a component file -->
+ClipAllIconBadge(
+    symbolName: descriptor.symbolName,
+    size: ClipAllTheme.Size.iconSmall,
+    tone: isSelected ? .accent : .neutral
+)
+```
 
-(To be filled by the team)
+- `clipAllSurface()` is for top-level cards.
+- `clipAllInset()` is for nested fields and result blocks.
+- `ClipAllHoverRow` gives non-selectable rows a pointer affordance.
+- `ClipAllSelectableRowStyle` combines hover, pressed, selected fill, and a
+  leading accent marker. Selection must not rely on color alone.
+- Colors must use semantic `NSColor`-backed tokens so light and dark appearances
+  update together.
 
----
+## State And Accessibility
 
-## Props Conventions
-
-<!-- How props should be defined and typed -->
-
-(To be filled by the team)
-
----
-
-## Styling Patterns
-
-<!-- How styles are applied (CSS modules, styled-components, Tailwind, etc.) -->
-
-(To be filled by the team)
-
----
-
-## Accessibility
-
-<!-- A11y requirements and patterns -->
-
-(To be filled by the team)
-
----
+- Use native switches for persistent boolean preferences.
+- Async controls are disabled while their operation is pending and show progress
+  when the wait is user-visible.
+- Selected rows add `.isSelected`; icon-only state adds an accessibility label.
+- Keep text labels for success, failure, unavailable, and disabled states.
 
 ## Common Mistakes
 
-<!-- Component-related mistakes your team has made -->
-
-(To be filled by the team)
+- Do not mix hand-written `opacity`, radius, and icon badge values with shared
+  tokens for the same semantic role.
+- Do not make an accessory app's ordinary window borderless or globally movable
+  by its background.
+- Do not add a second app launch path for previews or local testing. Visual QA is
+  performed against `/Applications/ClipAll.app` only.

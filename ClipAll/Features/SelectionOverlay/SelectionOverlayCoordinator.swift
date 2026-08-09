@@ -18,6 +18,7 @@ final class SelectionOverlayCoordinator {
     private var synchronizationTask: Task<Void, Never>?
     private var positionedContextID: UUID?
     private var lastPresentedFrame: CGRect?
+    private var attachmentEdge: OverlayAttachmentEdge?
 
     init(store: SelectionOverlayStore) {
         self.store = store
@@ -74,6 +75,7 @@ final class SelectionOverlayCoordinator {
         store.dismiss()
         positionedContextID = nil
         lastPresentedFrame = nil
+        attachmentEdge = nil
         if panel.isKeyWindow {
             panel.resignKey()
         }
@@ -111,11 +113,12 @@ final class SelectionOverlayCoordinator {
             && positionedContextID == context.id
             && lastPresentedFrame != nil
         let frame: CGRect
-        if keepsCurrentAnchor, let lastPresentedFrame {
-            frame = anchoredFrame(
+        if keepsCurrentAnchor, let lastPresentedFrame, let attachmentEdge {
+            frame = OverlayPlacement.resizedFrame(
                 from: lastPresentedFrame,
                 panelSize: size,
-                visibleFrame: screen.visibleFrame
+                visibleFrame: screen.visibleFrame,
+                attachmentEdge: attachmentEdge
             )
         } else {
             frame = OverlayPlacement.calculate(
@@ -124,6 +127,7 @@ final class SelectionOverlayCoordinator {
                 visibleFrame: screen.visibleFrame
             )
             positionedContextID = context.id
+            attachmentEdge = OverlayPlacement.attachmentEdge(for: frame, anchor: anchor)
         }
         if store.isMorePresented {
             panel.allowsKeyboardInput = true
@@ -166,32 +170,6 @@ final class SelectionOverlayCoordinator {
             guard !Task.isCancelled else { return }
             self?.synchronizePanel()
         }
-    }
-
-    private func anchoredFrame(
-        from currentFrame: CGRect,
-        panelSize: CGSize,
-        visibleFrame: CGRect
-    ) -> CGRect {
-        let inset = OverlayPlacement.edgeInset
-        let minX = visibleFrame.minX + inset
-        let minY = visibleFrame.minY + inset
-        let maxWidth = max(1, visibleFrame.width - inset * 2)
-        let maxHeightBelowAnchor = max(40, currentFrame.maxY - minY)
-        let size = CGSize(
-            width: min(panelSize.width, maxWidth),
-            height: min(panelSize.height, maxHeightBelowAnchor)
-        )
-        let maxX = max(minX, visibleFrame.maxX - size.width - inset)
-        let topY = min(
-            max(currentFrame.maxY, minY + size.height),
-            visibleFrame.maxY - inset
-        )
-        let origin = CGPoint(
-            x: min(max(currentFrame.minX, minX), maxX),
-            y: topY - size.height
-        )
-        return CGRect(origin: origin, size: size)
     }
 
     private func installDismissMonitors() {
