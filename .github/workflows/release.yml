@@ -13,13 +13,13 @@ jobs:
     runs-on: macos-15
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Require arm64 runner and matching tag
         id: version
-        shell: zsh
+        shell: zsh {0}
         run: |
           [[ "$(uname -m)" == "arm64" ]] || {
             print -u2 "Releases must be built on an arm64 macOS runner."
@@ -46,7 +46,7 @@ jobs:
 
       - name: Package arm64 artifact and checksum
         id: package
-        shell: zsh
+        shell: zsh {0}
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
