@@ -8,12 +8,12 @@ enum ClipAllTheme {
     static let surface = Color(nsColor: .controlBackgroundColor)
     static let elevatedSurface = Color(nsColor: .textBackgroundColor)
     static let separator = Color(nsColor: .separatorColor)
-    static let border = Color.primary.opacity(0.11)
-    static let quietFill = Color.primary.opacity(0.05)
-    static let hoverFill = Color.primary.opacity(0.065)
-    static let pressedFill = Color.primary.opacity(0.105)
-    static let accentSoft = accent.opacity(0.075)
-    static let selectionFill = accent.opacity(0.09)
+    static let border = Color.primary.opacity(0.095)
+    static let quietFill = Color.primary.opacity(0.038)
+    static let hoverFill = Color.primary.opacity(0.055)
+    static let pressedFill = Color.primary.opacity(0.09)
+    static let accentSoft = accent.opacity(0.07)
+    static let selectionFill = accent.opacity(0.075)
 
     enum Spacing {
         static let xxs: CGFloat = 4
@@ -27,14 +27,13 @@ enum ClipAllTheme {
     enum Radius {
         static let control: CGFloat = 8
         static let row: CGFloat = 10
-        static let surface: CGFloat = 13
-        static let overlayExpanded: CGFloat = 12
-        static let overlayCollapsed: CGFloat = 18
+        static let surface: CGFloat = 16
+        static let overlayChrome: CGFloat = 8
     }
 
     enum Size {
-        static let settingsSidebar: CGFloat = 178
-        static let pluginList: CGFloat = 242
+        static let settingsSidebar: CGFloat = 188
+        static let pluginList: CGFloat = 260
         static let capabilityList: CGFloat = 246
         static let iconSmall: CGFloat = 30
         static let iconMedium: CGFloat = 40
@@ -46,7 +45,7 @@ enum ClipAllTheme {
         if match == .darkAqua {
             return NSColor(srgbRed: 0.88, green: 0.48, blue: 0.39, alpha: 1)
         }
-        return NSColor(srgbRed: 0.76, green: 0.31, blue: 0.24, alpha: 1)
+        return NSColor(srgbRed: 0.72, green: 0.29, blue: 0.23, alpha: 1)
     }
 }
 
@@ -65,9 +64,9 @@ private struct ClipAllSurfaceModifier: ViewModifier {
                     .stroke(ClipAllTheme.border, lineWidth: 1)
             }
             .shadow(
-                color: colorScheme == .dark ? .clear : .black.opacity(0.055),
-                radius: 8,
-                y: 3
+                color: colorScheme == .dark ? .clear : .black.opacity(0.045),
+                radius: 12,
+                y: 4
             )
     }
 }
@@ -204,6 +203,15 @@ struct ClipAllSelectableRowStyle: ButtonStyle {
                             RoundedRectangle(cornerRadius: ClipAllTheme.Radius.row, style: .continuous)
                                 .fill(ClipAllTheme.pressedFill)
                         }
+                    }
+                }
+                .overlay {
+                    if isSelected {
+                        RoundedRectangle(
+                            cornerRadius: ClipAllTheme.Radius.row,
+                            style: .continuous
+                        )
+                        .stroke(ClipAllTheme.accent.opacity(0.24), lineWidth: 1)
                     }
                 }
                 .overlay(alignment: .leading) {

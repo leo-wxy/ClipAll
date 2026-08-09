@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import SwiftUI
 
@@ -15,15 +16,6 @@ private enum SettingsSection: String, CaseIterable, Hashable, Identifiable {
         case .capabilities: "操作栏"
         case .plugins: "插件"
         case .developer: "开发者"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .general: "取词行为、快捷键与系统权限"
-        case .capabilities: "安排取词浮窗中的常用操作"
-        case .plugins: "管理内置能力与本地插件"
-        case .developer: "载入、重新载入并调试本地插件"
         }
     }
 
@@ -47,45 +39,16 @@ struct SettingsRootView: View {
     @StateObject private var navigation = SettingsNavigationModel()
 
     var body: some View {
-        NavigationSplitView {
-            List(SettingsSection.allCases, selection: $navigation.selection) { section in
-                Label(section.title, systemImage: section.symbolName)
-                    .font(.system(size: 13, weight: .medium))
-                    .symbolRenderingMode(.hierarchical)
-                    .tag(section)
-            }
-            .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(
-                min: 164,
-                ideal: ClipAllTheme.Size.settingsSidebar,
-                max: 194
-            )
-            .safeAreaInset(edge: .bottom) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("ClipAll")
-                        .font(.caption.weight(.semibold))
-                    Text("本地文字能力工具")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text("版本 \(appVersion)")
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.tertiary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, ClipAllTheme.Spacing.sm)
-                .padding(.vertical, ClipAllTheme.Spacing.xs)
-                .background(.bar)
-            }
-        } detail: {
+        HStack(spacing: 0) {
+            sidebar
+            Divider()
             VStack(spacing: 0) {
-                pageHeader
-                Divider()
                 content
             }
             .background(ClipAllTheme.canvas)
         }
-        .navigationSplitViewStyle(.balanced)
-        .frame(minWidth: 880, idealWidth: 920, minHeight: 580, idealHeight: 620)
+        .background(ClipAllTheme.sidebar)
+        .frame(minWidth: 1_020, idealWidth: 1_140, minHeight: 650, idealHeight: 720)
         .tint(ClipAllTheme.accent)
         .task { await environment.start() }
     }
@@ -94,23 +57,76 @@ struct SettingsRootView: View {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
     }
 
-    private var pageHeader: some View {
-        HStack(alignment: .center, spacing: ClipAllTheme.Spacing.sm) {
-            ClipAllIconBadge(
-                symbolName: navigation.selection.symbolName,
-                size: ClipAllTheme.Size.iconMedium
-            )
-            VStack(alignment: .leading, spacing: 2) {
-                Text(navigation.selection.title)
-                    .font(.system(size: 20, weight: .semibold))
-                Text(navigation.selection.subtitle)
-                    .font(.callout)
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 38, height: 38)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("ClipAll")
+                        .font(.headline)
+                    Text("本地文字能力工具")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .clipAllSurface(cornerRadius: 14)
+
+            VStack(spacing: 5) {
+                ForEach(SettingsSection.allCases) { section in
+                    Button {
+                        navigation.selection = section
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: section.symbolName)
+                                .font(.system(size: 15, weight: .medium))
+                                .symbolRenderingMode(.hierarchical)
+                                .frame(width: 22)
+                            Text(section.title)
+                                .font(.system(size: 14, weight: .medium))
+                            Spacer()
+                        }
+                        .foregroundStyle(
+                            navigation.selection == section
+                                ? ClipAllTheme.accent
+                                : Color.primary
+                        )
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                    }
+                    .buttonStyle(
+                        ClipAllSelectableRowStyle(
+                            isSelected: navigation.selection == section
+                        )
+                    )
+                    .accessibilityAddTraits(
+                        navigation.selection == section ? .isSelected : []
+                    )
+                }
+            }
+            .padding(.top, ClipAllTheme.Spacing.lg)
+
+            Spacer()
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("版本 \(appVersion)")
+                    .font(.caption.monospacedDigit().weight(.medium))
+                Text("菜单栏与 Dock 均可打开")
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            Spacer()
+            .padding(.horizontal, 4)
         }
-        .padding(.horizontal, ClipAllTheme.Spacing.lg)
-        .padding(.vertical, ClipAllTheme.Spacing.sm)
+        .padding(.horizontal, 14)
+        .padding(.top, 44)
+        .padding(.bottom, 16)
+        .frame(width: ClipAllTheme.Size.settingsSidebar)
+        .frame(maxHeight: .infinity)
+        .background(ClipAllTheme.sidebar)
     }
 
     @ViewBuilder

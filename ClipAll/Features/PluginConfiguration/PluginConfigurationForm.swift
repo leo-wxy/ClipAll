@@ -11,36 +11,57 @@ struct PluginConfigurationForm: View {
             Text("这个插件没有配置项。")
                 .foregroundStyle(.secondary)
         } else {
-            VStack(alignment: .leading, spacing: ClipAllTheme.Spacing.sm) {
-                ForEach(descriptor.configurationFields) { field in
-                    if configurationStore.isVisible(field, pluginID: descriptor.id) {
-                        fieldView(field)
-                    }
+            VStack(spacing: 0) {
+                ForEach(Array(visibleFields.enumerated()), id: \.element.id) { index, field in
+                    fieldView(field)
+                    if index < visibleFields.count - 1 { Divider() }
                 }
             }
         }
     }
 
+    private var visibleFields: [PluginConfigurationField] {
+        descriptor.configurationFields.filter {
+            configurationStore.isVisible($0, pluginID: descriptor.id)
+        }
+    }
+
     @ViewBuilder
     private func fieldView(_ field: PluginConfigurationField) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        HStack(alignment: .center, spacing: ClipAllTheme.Spacing.lg) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(field.title)
+                    .font(.callout.weight(.semibold))
+                if let summary = field.summary {
+                    Text(summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: 230, alignment: .leading)
+
+            Spacer(minLength: ClipAllTheme.Spacing.md)
+
             switch field.kind {
             case let .choice(options):
-                Picker(field.title, selection: stringBinding(field)) {
+                Picker("", selection: stringBinding(field)) {
                     ForEach(options) { option in
                         Text(option.title).tag(option.id)
                     }
                 }
+                .labelsHidden()
                 .pickerStyle(.menu)
+                .frame(width: 250)
             case .toggle:
-                Toggle(field.title, isOn: boolBinding(field))
+                Toggle("", isOn: boolBinding(field))
+                    .labelsHidden()
                     .toggleStyle(.switch)
+                    .fixedSize()
             case let .text(placeholder):
-                LabeledContent(field.title) {
-                    TextField(placeholder ?? "", text: stringBinding(field))
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 320)
-                }
+                TextField(placeholder ?? "", text: stringBinding(field))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 300)
             case let .secret(placeholder):
                 SecretConfigurationField(
                     pluginID: descriptor.id,
@@ -49,13 +70,10 @@ struct PluginConfigurationForm: View {
                     secretStore: secretStore
                 )
             }
-
-            if let summary = field.summary {
-                Text(summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
+        .padding(.horizontal, ClipAllTheme.Spacing.md)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func stringBinding(_ field: PluginConfigurationField) -> Binding<String> {
@@ -116,16 +134,14 @@ private struct SecretConfigurationField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            LabeledContent(field.title) {
-                HStack {
-                    SecureField(model.isStored ? "已设置，输入新值可替换" : (placeholder ?? ""), text: $model.value)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 220)
-                    Button("保存") { model.save() }
-                        .disabled(model.value.isEmpty)
-                    if model.isStored {
-                        Button("清除", role: .destructive) { model.clear() }
-                    }
+            HStack {
+                SecureField(model.isStored ? "已设置，输入新值可替换" : (placeholder ?? ""), text: $model.value)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 220)
+                Button("保存") { model.save() }
+                    .disabled(model.value.isEmpty)
+                if model.isStored {
+                    Button("清除", role: .destructive) { model.clear() }
                 }
             }
             if let message = model.message {
@@ -134,6 +150,7 @@ private struct SecretConfigurationField: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .frame(width: 360, alignment: .leading)
     }
 }
 

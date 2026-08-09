@@ -37,6 +37,7 @@ final class SelectionOverlayStore: ObservableObject {
     private let settings: SettingsStore
     private let configuration: PluginConfigurationStore
     private let clipboard: any ClipboardWriting
+    private let textPaster: any TextPasting
     private let openAITranslation: OpenAICompatibleTranslationProvider
     private let featureExtractor: ContentFeatureExtractor
     private let router: CapabilityRouter
@@ -50,6 +51,7 @@ final class SelectionOverlayStore: ObservableObject {
         settings: SettingsStore,
         configuration: PluginConfigurationStore,
         clipboard: any ClipboardWriting,
+        textPaster: any TextPasting,
         openAITranslation: OpenAICompatibleTranslationProvider,
         featureExtractor: ContentFeatureExtractor = ContentFeatureExtractor(),
         router: CapabilityRouter = CapabilityRouter(),
@@ -59,6 +61,7 @@ final class SelectionOverlayStore: ObservableObject {
         self.settings = settings
         self.configuration = configuration
         self.clipboard = clipboard
+        self.textPaster = textPaster
         self.openAITranslation = openAITranslation
         self.featureExtractor = featureExtractor
         self.router = router
@@ -154,6 +157,15 @@ final class SelectionOverlayStore: ObservableObject {
             dismiss()
         } else {
             phase = .failure(nil, "无法写入剪贴板")
+        }
+    }
+
+    func pasteClipboard() {
+        guard context != nil else { return }
+        if textPaster.paste() {
+            dismiss()
+        } else {
+            phase = .failure(nil, "无法发送粘贴操作")
         }
     }
 

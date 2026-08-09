@@ -11,7 +11,6 @@ final class SelectionOverlayCoordinator {
 
     private var cancellables: Set<AnyCancellable> = []
     private var globalMouseMonitor: Any?
-    private var globalKeyMonitor: Any?
     private var localMouseMonitor: Any?
     private var workspaceActivationObserver: NSObjectProtocol?
     private var panelResignKeyObserver: NSObjectProtocol?
@@ -173,17 +172,12 @@ final class SelectionOverlayCoordinator {
     }
 
     private func installDismissMonitors() {
+        // Keep ordinary key events completely outside ClipAll. Observing `.keyDown`
+        // here disrupts source-app input method composition and can duplicate text.
         globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] _ in
             let location = NSEvent.mouseLocation
             Task { @MainActor [weak self] in
                 guard let self, self.store.isVisible, !self.panel.frame.contains(location) else { return }
-                self.dismiss()
-            }
-        }
-
-        globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self, self.store.isVisible, !self.panel.isKeyWindow else { return }
                 self.dismiss()
             }
         }

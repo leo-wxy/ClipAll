@@ -62,6 +62,13 @@ struct SelectionOverlayView: View {
                 action: store.copySelection
             )
 
+            actionButton(
+                title: "粘贴",
+                symbolName: "doc.on.clipboard",
+                isLoading: false,
+                action: store.pasteClipboard
+            )
+
             ForEach(store.fixedCapabilities) { capability in
                 actionButton(
                     title: capability.name,
@@ -335,17 +342,8 @@ struct SelectionOverlayView: View {
         }
     }
 
-    private var isCollapsed: Bool {
-        guard !store.isMorePresented,
-              store.recommendation == nil,
-              case .ready = store.phase else {
-            return false
-        }
-        return true
-    }
-
     private var cornerRadius: CGFloat {
-        isCollapsed ? ClipAllTheme.Radius.overlayCollapsed : ClipAllTheme.Radius.overlayExpanded
+        ClipAllTheme.Radius.overlayChrome
     }
 
     private var overlaySurface: Color {
@@ -411,9 +409,15 @@ private struct OverlayChromeButtonStyle: ButtonStyle {
         configuration.label
             .background {
                 ZStack {
-                    OverlayHoverHighlight(cornerRadius: 7, opacity: 0.075)
+                    OverlayHoverHighlight(
+                        cornerRadius: ClipAllTheme.Radius.overlayChrome,
+                        opacity: 0.075
+                    )
                     if configuration.isPressed {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        RoundedRectangle(
+                            cornerRadius: ClipAllTheme.Radius.overlayChrome,
+                            style: .continuous
+                        )
                             .fill(Color.primary.opacity(0.12))
                     }
                 }

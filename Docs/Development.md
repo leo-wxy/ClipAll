@@ -1,6 +1,6 @@
 # ClipAll 本地开发与验收
 
-当前源码版本由根目录 [`VERSION`](../VERSION) 管理（`0.0.1`）。修改版本时必须同步 `Support/ClipAll-Info.plist` 的 `CFBundleShortVersionString` 和 `CFBundleVersion`，然后运行：
+当前源码版本由根目录 [`VERSION`](../VERSION) 管理（`0.0.2`）。修改版本时必须同步 `Support/ClipAll-Info.plist` 的 `CFBundleShortVersionString` 和 `CFBundleVersion`，然后运行：
 
 ```sh
 ./Scripts/check-version.sh
@@ -47,7 +47,7 @@ App 第一次取词需要“系统设置 → 隐私与安全性 → 辅助功能
 
 1. 启动 App，确认通用设置中的辅助功能权限为“已授权”，并开启自动取词。
 2. 在任意支持 Accessibility 选区的 App 中选择文字，确认非激活浮层出现在选区附近。
-3. 验证复制、搜索、翻译、推荐、“更多”搜索、Esc/外点关闭以及最近使用。
+3. 验证复制、粘贴、搜索、翻译、推荐、“更多”搜索、Esc/外点关闭以及最近使用。
 4. 在“设置 → 插件”安装时间工具示例，再选择 `1712345678` 与 `2024-04-05T19:34:38Z`，分别执行两个方向并复制结果。
 5. 验证插件停用、重新启用、保留配置卸载和删除配置卸载。
 6. 开启开发者模式，加载未打包插件，验证重新载入、当前配置、单次执行、日志和 11 个 fixtures。

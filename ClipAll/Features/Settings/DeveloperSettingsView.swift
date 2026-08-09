@@ -36,7 +36,7 @@ struct DeveloperSettingsView: View {
                     if !lifecycle.invalidPlugins.isEmpty { diagnosticsPanel }
                 }
             }
-            .frame(maxWidth: 720)
+            .frame(maxWidth: 760)
             .padding(ClipAllTheme.Spacing.lg)
             .frame(maxWidth: .infinity)
         }

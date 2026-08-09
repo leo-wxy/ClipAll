@@ -14,7 +14,7 @@ struct CapabilityCenterView: View {
     @ObservedObject private var registry: CapabilityRegistry
     @ObservedObject private var settings: SettingsStore
     @StateObject private var model = CapabilityCenterViewModel()
-    @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
 
     init(environment: AppEnvironment) {
         self.environment = environment
@@ -222,8 +222,8 @@ struct CapabilityCenterView: View {
     }
 
     private func bringSettingsToFront() {
+        openWindow(id: "settings")
         NSApplication.shared.activate(ignoringOtherApps: true)
-        openSettings()
         DispatchQueue.main.async {
             NSApplication.shared.activate(ignoringOtherApps: true)
         }

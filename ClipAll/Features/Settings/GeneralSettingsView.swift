@@ -74,7 +74,7 @@ struct GeneralSettingsView: View {
                     }
                 }
             }
-            .frame(maxWidth: 680)
+            .frame(maxWidth: 760)
             .padding(ClipAllTheme.Spacing.lg)
             .frame(maxWidth: .infinity)
         }

@@ -20,16 +20,18 @@ struct ClipAllApp: App {
         .defaultSize(width: 860, height: 580)
         .windowResizability(.contentMinSize)
 
-        Settings {
+        Window("ClipAll 设置", id: "settings") {
             SettingsRootView(environment: environment)
         }
-        .defaultSize(width: 920, height: 620)
+        .defaultSize(width: 1_140, height: 720)
         .windowResizability(.contentMinSize)
+        .windowStyle(.hiddenTitleBar)
     }
 }
 
 private struct MenuBarStatusIcon: View {
     @ObservedObject var settings: SettingsStore
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
@@ -45,15 +47,21 @@ private struct MenuBarStatusIcon: View {
         .frame(width: 29, height: 20)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(settings.isMonitoringEnabled ? "ClipAll 已启用" : "ClipAll 已停用")
+        .onReceive(NotificationCenter.default.publisher(for: .clipAllOpenSettings)) { _ in
+            openWindow(id: "settings")
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
     }
 
     private var menuBarImage: NSImage? {
         guard let url = Bundle.main.url(forResource: "MenuBarIcon", withExtension: "svg"),
-              let image = NSImage(contentsOf: url)
+              let data = try? Data(contentsOf: url, options: .uncached),
+              let image = NSImage(data: data)
         else {
             return nil
         }
         image.isTemplate = true
+        image.cacheMode = .never
         image.size = NSSize(width: 24.3, height: 14.4)
         return image
     }
@@ -63,7 +71,6 @@ private struct MenuBarContent: View {
     let environment: AppEnvironment
     @ObservedObject private var settings: SettingsStore
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.openSettings) private var openSettings
 
     init(environment: AppEnvironment) {
         self.environment = environment
@@ -107,7 +114,7 @@ private struct MenuBarContent: View {
 
     private func bringSettingsToFront() {
         NSApplication.shared.activate(ignoringOtherApps: true)
-        openSettings()
+        openWindow(id: "settings")
         DispatchQueue.main.async {
             NSApplication.shared.activate(ignoringOtherApps: true)
         }

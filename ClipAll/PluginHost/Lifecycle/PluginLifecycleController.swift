@@ -134,6 +134,39 @@ final class PluginLifecycleController: ObservableObject {
         await installationStore.discard(prepared)
     }
 
+    func repairBundledPluginIfNeeded(
+        pluginID: PluginID,
+        from bundledURL: URL
+    ) async throws -> Bool {
+        let installedName = "\(pluginID.rawValue).clipallplugin"
+        guard invalidPlugins.contains(where: {
+            $0.packageURL.lastPathComponent == installedName
+                && $0.issue.code == "incompatible_host"
+        }) else {
+            return false
+        }
+
+        let prepared = try await prepareImport(from: bundledURL)
+        guard prepared.package.definition.descriptor.id == pluginID else {
+            await discardImport(prepared)
+            throw PluginLifecycleError.pluginConflict(
+                "随 App 提供的示例插件 ID 与待修复插件不一致"
+            )
+        }
+        guard prepared.replacesExistingPlugin else {
+            await discardImport(prepared)
+            return false
+        }
+
+        do {
+            try await install(prepared, replacingExisting: true)
+            return true
+        } catch {
+            await discardImport(prepared)
+            throw error
+        }
+    }
+
     func install(
         _ prepared: PreparedPluginImport,
         replacingExisting: Bool
@@ -183,6 +216,8 @@ final class PluginLifecycleController: ObservableObject {
             package: installed,
             state: shouldEnable ? .enabled : .disabled
         ))
+        let installedName = "\(pluginID.rawValue).clipallplugin"
+        invalidPlugins.removeAll { $0.packageURL.lastPathComponent == installedName }
     }
 
     func setEnabled(_ enabled: Bool, pluginID: PluginID) async throws {

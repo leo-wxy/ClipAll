@@ -34,6 +34,7 @@ final class AppEnvironment: ObservableObject {
         let permissions = AccessibilityPermissionService()
         let runnerClient = PluginRunnerClient(runnerURL: runnerURL ?? Self.resolveRunnerURL())
         let clipboard = ClipboardService()
+        let textPaster = PasteService()
         let openAITranslation = OpenAICompatibleTranslationProvider(secrets: secrets)
         let developmentStore = DevelopmentPluginStore(defaults: defaults)
         let pluginRoot = (applicationSupportURL ?? Self.defaultApplicationSupportURL())
@@ -76,6 +77,7 @@ final class AppEnvironment: ObservableObject {
             settings: settings,
             configuration: configuration,
             clipboard: clipboard,
+            textPaster: textPaster,
             openAITranslation: openAITranslation
         )
         let overlayCoordinator = SelectionOverlayCoordinator(store: overlayStore)
@@ -122,6 +124,16 @@ final class AppEnvironment: ObservableObject {
         guard !hasStarted else { return }
         hasStarted = true
         await pluginLifecycle.loadInstalled()
+        if let bundledTimestampToolsURL {
+            do {
+                _ = try await pluginLifecycle.repairBundledPluginIfNeeded(
+                    pluginID: .timestampTools,
+                    from: bundledTimestampToolsURL
+                )
+            } catch {
+                startupIssue = "无法更新随附的时间工具：\(error.localizedDescription)"
+            }
+        }
         settings.reconcileCapabilities(availableIDs: Set(registry.descriptors.map(\.id)))
         permissions.refresh()
         if !permissions.isTrusted, !settings.hasShownPermissionOnboarding {
