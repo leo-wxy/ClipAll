@@ -2,8 +2,8 @@
   "manifestVersion": 1,
   "id": "com.clipall.plugin.timestamp-tools",
   "name": "时间工具",
-  "version": "1.0.0",
-  "minimumClipAllVersion": "0.0.2",
+  "version": "1.1.0",
+  "minimumClipAllVersion": "0.0.3",
   "summary": "日期与 Unix 时间戳之间的本地双向转换。",
   "symbolName": "clock.arrow.2.circlepath",
   "runtime": {
@@ -66,9 +66,9 @@
       "id": "com.clipall.plugin.timestamp-tools.date-to-timestamp",
       "name": "日期 → 时间戳",
       "symbolName": "number.square",
-      "purpose": "把 ISO 8601 或明确的常见日期格式转换为 Unix 秒和毫秒时间戳。",
+      "purpose": "把 ISO 8601、常见数字日期或中文日期转换为 Unix 秒和毫秒时间戳。",
       "supportedContentKinds": ["dateTime"],
-      "examples": ["2024-04-05T19:34:38Z", "2024-04-05 19:34:38", "2024/04/05 19:34:38"],
+      "examples": ["2024-04-05T19:34:38Z", "2024-04-05 19:34:38", "2024年4月5日"],
       "exclusions": ["只有年份或月份", "自然语言相对日期", "无效或自动进位后的日期"],
       "executionKind": "resultPanel",
       "handler": "dateToTimestamp",
@@ -76,7 +76,21 @@
         {
           "contentKind": "dateTime",
           "score": 97,
-          "reason": "检测到明确的日期时间格式"
+          "reason": "检测到明确的日期时间格式",
+          "inputMatchers": [
+            {
+              "type": "dateFormat",
+              "formats": [
+                "yyyy-MM-dd HH:mm:ss",
+                "yyyy/MM/dd HH:mm:ss",
+                "yyyy-MM-dd'T'HH:mm:ss",
+                "yyyy-MM-dd",
+                "yyyy/MM/dd",
+                "yyyy年M月d日 HH:mm:ss",
+                "yyyy年M月d日"
+              ]
+            }
+          ]
         }
       ]
     }

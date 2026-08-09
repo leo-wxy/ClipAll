@@ -19,6 +19,8 @@
 
 未知顶层字段会被拒绝，避免拼写错误被静默忽略。
 
+版本分为三层：`version` 是插件自己的三段 SemVer；`manifestVersion` 是清单合同版本；`minimumClipAllVersion` 是该插件包所需的最低宿主版本。新增能力或输入格式通常提升插件 minor 版本；只有清单结构发生不兼容变化时才提升 `manifestVersion`。
+
 ## 配置字段
 
 共同字段：`id`、`title`、可选 `summary`、`type`、`defaultValue`，以及可选 `visibleWhen`：
@@ -59,6 +61,30 @@ field ID 在插件内唯一。`visibleWhen` 只能引用同插件字段，且比
 内容类型 v1：`text`、`foreignLanguage`、`url`、`email`、`code`、`address`、`unixTimestampSeconds`、`unixTimestampMilliseconds`、`dateTime`。
 
 每条 routing rule 的 `score` 范围为 0…100。结构化且可确定的内容可使用高分；通用文本能力应使用较低分，避免压过专用能力。推荐仍由宿主阈值和用户固定项决定，插件不能要求自动执行。
+
+### 声明式输入匹配
+
+`routingRules[].inputMatchers` 是可选的补充匹配条件。v1 当前只支持受限的 `dateFormat`，用于让日期插件声明自身能够解析的本地日期形状：
+
+```json
+{
+  "contentKind": "dateTime",
+  "score": 97,
+  "reason": "检测到明确的日期格式",
+  "inputMatchers": [
+    {
+      "type": "dateFormat",
+      "formats": ["yyyy-MM-dd", "yyyy年M月d日", "yyyy年M月d日 HH:mm:ss"]
+    }
+  ]
+}
+```
+
+- `dateFormat` 支持 `yyyy`、`M`/`MM`、`d`/`dd`，以及成组出现的 `H`/`HH`、`m`/`mm`、`s`/`ss`；ASCII 字母常量需单引号包裹，例如 `'T'`。
+- 每个格式必须包含年、月、日；如果声明时间，则时、分、秒必须同时存在。宿主会进行完整字符串和真实 Gregorian 日历校验，不接受自动进位日期。
+- 每条 routing rule 最多 4 个 matcher、每个 matcher 最多 16 个不重复格式，每个能力累计最多 32 个格式。
+- matcher 在宿主本地参与推荐，不会执行 JavaScript、不会访问系统服务，也不会自动运行能力。handler 仍需独立严格解析输入并返回明确错误。
+- 没有 `inputMatchers` 的旧 v1 插件继续使用内容类型路由；使用该字段的插件应把 `minimumClipAllVersion` 设为 `0.0.3` 或更高。
 
 ## 包限制
 

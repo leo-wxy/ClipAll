@@ -44,17 +44,8 @@ jobs:
           CLIPALL_ADHOC: "1"
         run: Scripts/build-local-app.sh
 
-      - name: Package arm64 artifact and checksum
-        id: package
-        shell: zsh {0}
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          artifact=".build/ClipAll-${VERSION}-macos-arm64-ad-hoc.zip"
-          ditto -c -k --sequesterRsrc --keepParent ".build/ClipAll.app" "$artifact"
-          (cd "$(dirname "$artifact")" && shasum -a 256 "$(basename "$artifact")") > "$artifact.sha256"
-          print "artifact=$artifact" >> "$GITHUB_OUTPUT"
-          print "checksum=$artifact.sha256" >> "$GITHUB_OUTPUT"
+      - name: Package zip and DMG artifacts
+        run: Scripts/package-release.sh
 
       - name: Create prerelease
         env:
@@ -65,4 +56,6 @@ jobs:
             "$GITHUB_REF_NAME" \
             ".build/ClipAll-${VERSION}-macos-arm64-ad-hoc.zip" \
             ".build/ClipAll-${VERSION}-macos-arm64-ad-hoc.zip.sha256" \
+            ".build/ClipAll-${VERSION}-macos-arm64-ad-hoc.dmg" \
+            ".build/ClipAll-${VERSION}-macos-arm64-ad-hoc.dmg.sha256" \
             --title "ClipAll ${VERSION}"

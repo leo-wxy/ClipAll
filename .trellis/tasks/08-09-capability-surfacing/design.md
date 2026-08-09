@@ -234,8 +234,8 @@ Example.clipallplugin/
   "manifestVersion": 1,
   "id": "com.clipall.plugin.timestamp-tools",
   "name": "时间工具",
-  "version": "1.0.0",
-  "minimumClipAllVersion": "0.0.1",
+  "version": "1.1.0",
+  "minimumClipAllVersion": "0.0.3",
   "summary": "日期与 Unix 时间戳双向转换",
   "symbolName": "clock.arrow.2.circlepath",
   "runtime": {
@@ -317,7 +317,7 @@ runner 使用 JavaScriptCore 创建全新 context，只提供：
 `TimestampTools.clipallplugin` 是 SDK 的纵向参考，而非宿主 Swift 代码：
 
 - `main.js` 的 `timestampToDate` 只接受去除首尾空白后的 10 位或 13 位纯数字。10 位按 Unix 秒解析，13 位按 Unix 毫秒解析；越界、非有限结果或无效 `Date` 时返回稳定错误 code。
-- `dateToTimestamp` 优先解析带 `Z` 或 `±HH:mm` 时区的 ISO 8601，再严格解析 `yyyy-MM-dd HH:mm:ss`、`yyyy/MM/dd HH:mm:ss`、`yyyy-MM-dd'T'HH:mm:ss` 和 `yyyy-MM-dd`。仅日期按当天 `00:00:00` 解释。
+- `dateToTimestamp` 优先解析带 `Z` 或 `±HH:mm` 时区的 ISO 8601，再严格解析 manifest 声明的数字日期和 `yyyy年M月d日` 中文日期。仅日期按当天 `00:00:00` 解释。
 - 配置 `timeZone` 可选 `system` / `utc`；无时区输入按该配置解释，并在结果 subtitle 标注。配置 `displayFormat` 可选 `standard`、`iso8601`、`chinese`，每次执行从 request configuration 读取，不缓存旧值。
 - 时间戳转日期输出“所选时区”格式化结果与 UTC ISO 参考；日期转时间戳输出秒、毫秒和按所选格式规范化的解释结果。所有 result item 由宿主渲染并可逐项复制。
 - JavaScript 中使用显式字段解析与回写校验，不能依赖实现宽松的 `Date.parse` 处理无时区常见格式。

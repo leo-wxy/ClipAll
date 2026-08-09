@@ -40,16 +40,16 @@ for path in "$MAPPER" "$VALIDATOR"; do
     print -u2 "Host version default does not match VERSION in $path"
     exit 1
   }
+  if /usr/bin/grep -E 'hostVersion: String = "[0-9]+\.[0-9]+\.[0-9]+"' "$path" |
+    /usr/bin/grep -Fv "hostVersion: String = \"$VERSION\"" >/dev/null; then
+    print -u2 "Found a stale host version default in $path"
+    exit 1
+  fi
 done
 
 /usr/bin/grep -Fq "\"minimumClipAllVersion\": \"$VERSION\"" "$EXAMPLE_MANIFEST" || {
   print -u2 "TimestampTools minimumClipAllVersion does not match VERSION"
   exit 1
 }
-
-if /usr/bin/grep -Fn '0.1.0' "$MAPPER" "$VALIDATOR" "$EXAMPLE_MANIFEST" >/dev/null; then
-  print -u2 "Found stale 0.1.0 host version in release-owned files"
-  exit 1
-fi
 
 print "ClipAll version $VERSION is consistent."

@@ -32,7 +32,7 @@ struct SemanticVersion: Comparable, Equatable, Sendable {
 struct ExternalPluginManifestMapper: Sendable {
     let hostVersion: SemanticVersion
 
-    init(hostVersion: String = "0.0.2") {
+    init(hostVersion: String = "0.0.3") {
         guard let version = SemanticVersion(hostVersion) else {
             preconditionFailure("宿主版本必须是三段 SemVer")
         }
@@ -210,6 +210,7 @@ struct ExternalPluginManifestMapper: Sendable {
             guard !capability.routingRules.isEmpty, capability.routingRules.count <= 16 else {
                 throw issue("invalid_capability", "能力必须声明 1 到 16 条匹配规则", "\(path).routingRules")
             }
+            var declaredFormatCount = 0
             for (ruleIndex, rule) in capability.routingRules.enumerated() {
                 guard supportedKinds.contains(rule.contentKind), (0...100).contains(rule.score) else {
                     throw issue(
@@ -222,6 +223,43 @@ struct ExternalPluginManifestMapper: Sendable {
                     rule.reason,
                     maximum: 120,
                     location: "\(path).routingRules[\(ruleIndex)].reason"
+                )
+                guard rule.inputMatchers.count <= 4 else {
+                    throw issue(
+                        "manifest_limit",
+                        "每条匹配规则最多声明 4 个输入匹配器",
+                        "\(path).routingRules[\(ruleIndex)].inputMatchers"
+                    )
+                }
+                for (matcherIndex, matcher) in rule.inputMatchers.enumerated() {
+                    let matcherPath = "\(path).routingRules[\(ruleIndex)].inputMatchers[\(matcherIndex)]"
+                    guard matcher.type == .dateFormat,
+                          !matcher.formats.isEmpty,
+                          matcher.formats.count <= 16,
+                          Set(matcher.formats).count == matcher.formats.count else {
+                        throw issue(
+                            "invalid_capability",
+                            "dateFormat 匹配器必须声明 1 到 16 个不重复格式",
+                            "\(matcherPath).formats"
+                        )
+                    }
+                    declaredFormatCount += matcher.formats.count
+                    for (formatIndex, format) in matcher.formats.enumerated() {
+                        guard SupportedDateFormats.isValidDeclaration(format) else {
+                            throw issue(
+                                "invalid_capability",
+                                "日期格式包含不支持的字段或结构",
+                                "\(matcherPath).formats[\(formatIndex)]"
+                            )
+                        }
+                    }
+                }
+            }
+            guard declaredFormatCount <= 32 else {
+                throw issue(
+                    "manifest_limit",
+                    "每个能力最多声明 32 个日期输入格式",
+                    "\(path).routingRules"
                 )
             }
 

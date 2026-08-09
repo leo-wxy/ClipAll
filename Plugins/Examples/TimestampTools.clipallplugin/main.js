@@ -206,12 +206,37 @@ function parseLocalDate(text, timeZone) {
   };
 }
 
+function parseChineseDate(text, timeZone) {
+  var match = /^(\d{4})年(\d{1,2})月(\d{1,2})日(?: (\d{2}):(\d{2}):(\d{2}))?$/.exec(text);
+  if (!match) return null;
+
+  var fields = {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+    hour: match[4] ? Number(match[4]) : 0,
+    minute: match[5] ? Number(match[5]) : 0,
+    second: match[6] ? Number(match[6]) : 0,
+    millisecond: 0
+  };
+  if (!validCalendarFields(fields.year, fields.month, fields.day, fields.hour, fields.minute, fields.second)) {
+    pluginError("invalid_input", "日期字段无效");
+  }
+
+  return {
+    date: dateFromWallClock(fields, timeZone),
+    assumption: "未提供时区，按 " + timeZone + " 解释"
+  };
+}
+
 function parseDateInput(text, timeZone) {
   var explicit = parseExplicitISO(text);
   if (explicit) return explicit;
+  var chinese = parseChineseDate(text, timeZone);
+  if (chinese) return chinese;
   var local = parseLocalDate(text, timeZone);
   if (local) return local;
-  pluginError("invalid_input", "无法识别日期，请使用 ISO 8601 或 YYYY-MM-DD HH:mm:ss");
+  pluginError("invalid_input", "无法识别日期，请使用 ISO 8601、YYYY-MM-DD HH:mm:ss 或中文日期");
 }
 
 var ClipAllPlugin = {

@@ -62,6 +62,19 @@
     }
   },
   {
+    "name": "斜杠日期按 UTC 零点解释",
+    "capabilityID": "com.clipall.plugin.timestamp-tools.date-to-timestamp",
+    "input": "2024/04/05",
+    "configuration": { "timeZone": "utc", "displayFormat": "standard" },
+    "expect": {
+      "subtitle": "未提供时区，按 UTC 解释",
+      "itemValues": {
+        "seconds": "1712275200",
+        "milliseconds": "1712275200000"
+      }
+    }
+  },
+  {
     "name": "带偏移 ISO 日期",
     "capabilityID": "com.clipall.plugin.timestamp-tools.date-to-timestamp",
     "input": "2024-04-05T19:34:38+08:00",
@@ -69,6 +82,38 @@
     "expect": {
       "itemValues": { "seconds": "1712316878" }
     }
+  },
+  {
+    "name": "中文日期支持未补零月日",
+    "capabilityID": "com.clipall.plugin.timestamp-tools.date-to-timestamp",
+    "input": "2026年4月26日",
+    "configuration": { "timeZone": "utc", "displayFormat": "chinese" },
+    "expect": {
+      "subtitle": "未提供时区，按 UTC 解释",
+      "itemValues": {
+        "seconds": "1777161600",
+        "milliseconds": "1777161600000",
+        "interpreted": "2026年04月26日 00:00:00"
+      }
+    }
+  },
+  {
+    "name": "中文日期时间按系统时区解释",
+    "capabilityID": "com.clipall.plugin.timestamp-tools.date-to-timestamp",
+    "input": "2024年4月6日 03:34:38",
+    "configuration": { "timeZone": "system", "displayFormat": "standard" },
+    "systemTimeZoneIdentifier": "Asia/Shanghai",
+    "expect": {
+      "subtitle": "未提供时区，按 Asia/Shanghai 解释",
+      "itemValues": { "seconds": "1712345678" }
+    }
+  },
+  {
+    "name": "拒绝无效中文日期",
+    "capabilityID": "com.clipall.plugin.timestamp-tools.date-to-timestamp",
+    "input": "2023年2月29日",
+    "configuration": { "timeZone": "utc", "displayFormat": "standard" },
+    "expectError": "invalid_input"
   },
   {
     "name": "拒绝无效闰日",

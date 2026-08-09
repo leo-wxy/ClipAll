@@ -279,6 +279,7 @@ final class SelectionOverlayStore: ObservableObject {
         let routing = router.route(
             descriptors: availableDescriptors,
             features: features,
+            sourceText: context.text,
             pinnedCapabilityIDs: pinnedIDs
         )
         fixedCapabilities = settings.pinnedCapabilityIDs.compactMap { id in

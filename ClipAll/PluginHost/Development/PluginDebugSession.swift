@@ -71,6 +71,7 @@ final class PluginDebugSession: ObservableObject {
         matches = router.route(
             descriptors: package.definition.capabilities.map(\.descriptor),
             features: extracted,
+            sourceText: input,
             pinnedCapabilityIDs: []
         ).rankedMatches
     }

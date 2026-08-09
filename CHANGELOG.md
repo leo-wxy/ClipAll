@@ -2,6 +2,18 @@
 
 所有值得注意的变更都会记录在这里。
 
+## [0.0.3] - Unreleased
+
+### Added
+
+- 外置插件可在 `routingRules.inputMatchers` 中声明受限的 `dateFormat` 输入格式，无需把插件日期格式硬编码进宿主。
+- 时间工具插件 `1.1.0` 支持 `yyyy年M月d日` 和中文日期时间输入。
+- GitHub prerelease 同时提供带 Applications 快捷入口的 DMG、备用 zip 与校验文件。
+
+### Fixed
+
+- 自动取词跳过文本、搜索、日期和时间输入控件，避免编辑时干扰输入。
+
 ## [0.0.2] - 2026-08-09
 
 ### Added

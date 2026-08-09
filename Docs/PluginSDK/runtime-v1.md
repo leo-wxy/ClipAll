@@ -25,6 +25,8 @@ var ClipAllPlugin = {
 
 插件不能获得选区来源应用、文件路径或宿主服务对象。需要当前时间的行为不属于确定性转换；v1 不提供 `now` 注入。
 
+Manifest 的 `inputMatchers` 只在宿主路由阶段评估，不会传入 runner，也不会触发 handler。执行时插件仍只应信任并校验 `request.text`。
+
 ## 成功输出
 
 ```json

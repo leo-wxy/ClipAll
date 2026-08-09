@@ -27,7 +27,10 @@ enum SelectionCaptureError: Error, LocalizedError, Equatable, Sendable {
 
 @MainActor
 protocol SelectionCapturing: AnyObject {
-    func captureCurrentSelection(triggerLocation: CGPoint) throws -> SelectionContext
+    func captureCurrentSelection(
+        triggerLocation: CGPoint,
+        includesEditableContent: Bool
+    ) throws -> SelectionContext
 }
 
 @MainActor
@@ -38,12 +41,18 @@ final class SelectionCaptureService: SelectionCapturing {
         self.systemWideElement = systemWideElement
     }
 
-    func captureCurrentSelection(triggerLocation: CGPoint = NSEvent.mouseLocation) throws -> SelectionContext {
+    func captureCurrentSelection(
+        triggerLocation: CGPoint = NSEvent.mouseLocation,
+        includesEditableContent: Bool = true
+    ) throws -> SelectionContext {
         guard AXIsProcessTrusted() else {
             throw SelectionCaptureError.permissionRequired
         }
 
         let focusedElement = try focusedUIElement()
+        if !includesEditableContent, isEditableTextElement(focusedElement) {
+            throw SelectionCaptureError.unsupported
+        }
         let selectedRange = selectedTextRange(in: focusedElement)
         let selectedText = try selectedText(in: focusedElement, selectedRange: selectedRange)
         let bounds = textMarkerSelectionBounds(in: focusedElement)
@@ -80,6 +89,49 @@ final class SelectionCaptureService: SelectionCapturing {
             throw SelectionCaptureError.noFocusedElement
         }
         return unsafeDowncast(value, to: AXUIElement.self)
+    }
+
+    private func isEditableTextElement(_ element: AXUIElement) -> Bool {
+        var isSettable = DarwinBoolean(false)
+        if AXUIElementIsAttributeSettable(
+            element,
+            kAXValueAttribute as CFString,
+            &isSettable
+        ) == .success,
+        isSettable.boolValue {
+            return true
+        }
+
+        var roleValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            element,
+            kAXRoleAttribute as CFString,
+            &roleValue
+        ) == .success,
+        let role = roleValue as? String
+        else { return false }
+
+        let editableRoles = [
+            kAXTextFieldRole as String,
+            kAXTextAreaRole as String,
+            kAXComboBoxRole as String,
+            kAXDateFieldRole as String,
+            kAXTimeFieldRole as String,
+        ]
+        if editableRoles.contains(role) {
+            return true
+        }
+
+        var subroleValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            element,
+            kAXSubroleAttribute as CFString,
+            &subroleValue
+        ) == .success,
+        let subrole = subroleValue as? String
+        else { return false }
+
+        return subrole == kAXSearchFieldSubrole as String
     }
 
     private func selectedText(

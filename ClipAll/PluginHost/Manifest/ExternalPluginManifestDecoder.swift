@@ -86,9 +86,20 @@ struct ExternalPluginManifestDecoder: Sendable {
                         if let rule = rawRule as? [String: Any] {
                             try rejectUnknown(
                                 rule,
-                                allowed: ["contentKind", "score", "reason"],
+                                allowed: ["contentKind", "score", "reason", "inputMatchers"],
                                 path: "$.capabilities[\(index)].routingRules[\(ruleIndex)]"
                             )
+                            if let matchers = rule["inputMatchers"] as? [Any] {
+                                for (matcherIndex, rawMatcher) in matchers.enumerated() {
+                                    if let matcher = rawMatcher as? [String: Any] {
+                                        try rejectUnknown(
+                                            matcher,
+                                            allowed: ["type", "formats"],
+                                            path: "$.capabilities[\(index)].routingRules[\(ruleIndex)].inputMatchers[\(matcherIndex)]"
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }

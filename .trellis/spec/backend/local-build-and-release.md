@@ -11,6 +11,7 @@ assembly, `/Applications` installation, or GitHub Actions release behavior.
 Scripts/check-version.sh
 Scripts/build-local-app.sh
 Scripts/install-local-app.sh
+Scripts/package-release.sh
 CLIPALL_ADHOC=1 Scripts/build-local-app.sh
 git tag v<contents-of-VERSION>
 ```
@@ -30,6 +31,11 @@ and launches that path.
   bundle before replacement.
 - Local builds use `ClipAll Local Development`. `CLIPALL_ADHOC=1` is CI-only.
 - A `vX.Y.Z` tag must exactly equal `v$(<VERSION)` before creating a prerelease.
+- `package-release.sh` accepts only a verified `.build/ClipAll.app` whose bundle
+  version equals `VERSION`, then emits arm64 ad-hoc DMG and zip artifacts plus
+  one SHA-256 file for each artifact.
+- The DMG contains `ClipAll.app` and an `Applications` symbolic link. Release
+  packaging never installs or launches the intermediate App.
 
 ## 4. Validation And Error Matrix
 
@@ -41,6 +47,8 @@ and launches that path.
 | Applications process will not quit | install aborts before replacement |
 | Move of staged App fails | restore the backup when possible |
 | Tag differs from VERSION | release job exits before packaging |
+| Bundle signature or version is invalid | packaging exits before creating artifacts |
+| Release packaging succeeds | verify DMG and publish DMG, zip, and both checksums |
 | CI artifact | mark arm64, ad-hoc, prerelease, and not notarized |
 
 ## 5. Good / Base / Bad Cases
@@ -58,6 +66,8 @@ and launches that path.
 - `zsh -n Scripts/*.sh`: assert shell syntax.
 - `Scripts/verify-all.sh`: assert domain, overlay, provider, runner, fixture, and
   lifecycle checks.
+- `Scripts/package-release.sh`: verify the App signature and version, create the
+  DMG/zip pair, verify the DMG, and validate both SHA-256 files.
 - `swift build --target ClipAll`: assert the app module compiles.
 - CI with full Xcode runs `swift test`; CLT-only environments may not provide
   `XCTest` and must report that limitation rather than hiding it.

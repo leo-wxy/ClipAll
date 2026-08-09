@@ -6,7 +6,7 @@
 
 <p align="center">面向 macOS 的本地选词能力平台：选中文字，立即复制、粘贴、搜索、翻译或交给插件处理。</p>
 
-> 当前公开源码版本为 `0.0.2`。Release 是 macOS 15 arm64 的 ad-hoc prerelease，仅用于体验和测试，不是 Developer ID 签名或公证的正式分发包。
+> 当前开发版本为 `0.0.3`，最新公开 prerelease 为 `0.0.2`。Release 仅用于体验和测试，不是 Developer ID 签名或公证的正式分发包。
 
 ## 功能
 
@@ -17,7 +17,7 @@
 - 搜索支持 Google、Bing、DuckDuckGo，并通过默认浏览器打开。
 - 翻译支持 Apple 系统设备端翻译和 HTTPS OpenAI-compatible API。
 - 外置 `.clipallplugin` 支持导入、确认、启停、替换、卸载、配置、开发引用、重载和调试。
-- 随构建包提供时间工具示例插件，支持 Unix 时间戳与日期双向转换。
+- 随构建包提供时间工具示例插件，支持 Unix 时间戳、数字日期和中文日期双向转换。
 
 ## 环境要求
 
@@ -50,9 +50,9 @@ ad-hoc 构建只用于 CI 打包，不作为本地运行入口。
 
 ## Release 与系统限制
 
-仓库的 `vX.Y.Z` tag 会触发 GitHub Actions，在 `macos-15` arm64 runner 上执行验证并生成 ad-hoc `.zip` 和 SHA-256 校验文件。该流程不使用 Developer ID，也不执行 notarization；因此从网上下载的 App 可能被 Gatekeeper 阻止，首次打开需要在 Finder 中明确确认，并应只运行你信任的构建产物。
+仓库的 `vX.Y.Z` tag 会触发 GitHub Actions，在 `macos-15` arm64 runner 上执行验证并生成 ad-hoc `.dmg`、备用 `.zip` 及各自 SHA-256 校验文件。DMG 内包含 `ClipAll.app` 和 Applications 快捷入口。该流程不使用 Developer ID，也不执行 notarization；因此从网上下载的 App 仍可能被 Gatekeeper 阻止，首次打开需要在 Finder 中明确确认，并应只运行你信任的构建产物。
 
-Release App 仍需要用户在“系统设置 → 隐私与安全性 → 辅助功能”中手动授权 ClipAll。ad-hoc 签名不提供稳定的开发者身份，重新下载、替换或重建 App 后 macOS 可能要求重新授权。正式签名、公证、DMG、自动更新和生产分发不在 `0.0.2` 范围内。
+Release App 仍需要用户在“系统设置 → 隐私与安全性 → 辅助功能”中手动授权 ClipAll。ad-hoc 签名不提供稳定的开发者身份，重新下载、替换或重建 App 后 macOS 可能要求重新授权。正式签名、公证、自动更新和生产分发不在当前开发范围内。
 
 ## 使用流程
 
@@ -74,7 +74,7 @@ Example.clipallplugin/
 └── main.js
 ```
 
-`plugin.json` 声明插件信息、配置字段、能力和路由规则；`main.js` 暴露 `ClipAllPlugin.run(request)`，返回标题、副标题和可复制结果项。
+`plugin.json` 声明插件信息、配置字段、能力和路由规则；日期能力还可声明受限的 `dateFormat` 输入匹配器。`main.js` 暴露对应 handler，返回标题、副标题和可复制结果项。
 
 时间工具示例位于 [`Plugins/Examples/TimestampTools.clipallplugin`](Plugins/Examples/TimestampTools.clipallplugin)。它不参与主 App 编译，也不会自动进入能力注册表；用户仍需通过普通导入确认流程安装。
 
@@ -136,7 +136,7 @@ Scripts/                    # 构建、签名与验证入口
 ./Scripts/verify-lifecycle.sh Plugins/Examples/TimestampTools.clipallplugin
 ```
 
-这些程序覆盖路由与发现、浮层定位与设置持久化、AI 翻译请求边界、Runner 超时/取消/协议故障、时间工具的 11 个 fixtures，以及插件 staging、receipt、替换和卸载流程。
+这些程序覆盖 manifest 输入匹配、路由与发现、浮层定位与设置持久化、AI 翻译请求边界、Runner 超时/取消/协议故障、时间工具 fixtures，以及插件 staging、receipt、替换和卸载流程。
 
 `ClipAllTests` 当前只是 SwiftPM/XCTest 冒烟入口；主要回归验证仍由 `Verification/` 中的独立程序完成。真实取词、窗口位置、键盘焦点和系统翻译需要按 [本地开发与验收](Docs/Development.md) 手动验证。
 

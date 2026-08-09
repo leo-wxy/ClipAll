@@ -22,7 +22,7 @@ struct PluginPackageValidator: Sendable {
 
     init(
         limits: PluginPackageLimits = .standard,
-        hostVersion: String = "0.0.2"
+        hostVersion: String = "0.0.3"
     ) {
         self.limits = limits
         manifestDecoder = ExternalPluginManifestDecoder()

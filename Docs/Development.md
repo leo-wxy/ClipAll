@@ -1,6 +1,6 @@
 # ClipAll 本地开发与验收
 
-当前源码版本由根目录 [`VERSION`](../VERSION) 管理（`0.0.2`）。修改版本时必须同步 `Support/ClipAll-Info.plist` 的 `CFBundleShortVersionString` 和 `CFBundleVersion`，然后运行：
+当前源码版本由根目录 [`VERSION`](../VERSION) 管理（`0.0.3`）。修改版本时必须同步 `Support/ClipAll-Info.plist` 的 `CFBundleShortVersionString` 和 `CFBundleVersion`，然后运行：
 
 ```sh
 ./Scripts/check-version.sh
@@ -50,12 +50,12 @@ App 第一次取词需要“系统设置 → 隐私与安全性 → 辅助功能
 3. 验证复制、粘贴、搜索、翻译、推荐、“更多”搜索、Esc/外点关闭以及最近使用。
 4. 在“设置 → 插件”安装时间工具示例，再选择 `1712345678` 与 `2024-04-05T19:34:38Z`，分别执行两个方向并复制结果。
 5. 验证插件停用、重新启用、保留配置卸载和删除配置卸载。
-6. 开启开发者模式，加载未打包插件，验证重新载入、当前配置、单次执行、日志和 11 个 fixtures。
+6. 开启开发者模式，加载未打包插件，验证重新载入、当前配置、单次执行、日志和 15 个 fixtures。
 
 系统翻译首次使用可能由 macOS 准备或下载语言模型；AI 翻译只接受带 host 的 HTTPS endpoint，API key 存在 Keychain 中。
 
 ## Release 限制
 
-推送形如 `vX.Y.Z` 的 tag 会由 GitHub Actions 在 `macos-15` arm64 runner 上检查 tag 与 `VERSION` 一致性、运行完整验证并构建 ad-hoc prerelease。产物通过 `ditto` 打包并附带 SHA-256 校验文件；流程不使用 Developer ID 签名，也不执行 notarization。
+推送形如 `vX.Y.Z` 的 tag 会由 GitHub Actions 在 `macos-15` arm64 runner 上检查 tag 与 `VERSION` 一致性、运行完整验证并构建 ad-hoc prerelease。发布同时提供带 Applications 快捷入口的 DMG、备用 zip 和各自 SHA-256 校验文件；流程不使用 Developer ID 签名，也不执行 notarization。
 
-因此下载的 Release 可能触发 Gatekeeper 的“无法验证开发者”提示，用户需要在 Finder 中明确允许打开，并自行确认来源可信。首次取词还必须在“系统设置 → 隐私与安全性 → 辅助功能”中授权 ClipAll；ad-hoc 身份或替换 App 后，macOS 可能要求重新授权。正式签名、公证、DMG、自动更新和生产分发属于后续工作。
+因此下载的 Release 可能触发 Gatekeeper 的“无法验证开发者”提示，用户需要在 Finder 中明确允许打开，并自行确认来源可信。首次取词还必须在“系统设置 → 隐私与安全性 → 辅助功能”中授权 ClipAll；ad-hoc 身份或替换 App 后，macOS 可能要求重新授权。正式签名、公证、自动更新和生产分发属于后续工作。

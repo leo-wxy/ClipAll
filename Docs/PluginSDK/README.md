@@ -32,7 +32,7 @@ var ClipAllPlugin = {
 
 ## 匹配与外显
 
-插件通过每个 capability 的 `purpose`、`examples`、`exclusions` 和 `routingRules` 描述自己适合处理的内容。宿主先提取选中文字的内容特征，再按规则计算分数：
+插件通过每个 capability 的 `purpose`、`examples`、`exclusions` 和 `routingRules` 描述自己适合处理的内容。日期能力可以额外在 routing rule 中声明受限的 `dateFormat` 输入匹配器。宿主先提取选中文字的内容特征并评估声明式匹配，再按规则计算分数：
 
 - 固定能力由用户决定，常驻操作栏；
 - 推荐能力最多显示一个，必须由用户点击执行；
@@ -55,7 +55,7 @@ var ClipAllPlugin = {
 该插件提供两个独立能力：
 
 - 10/13 位 Unix 时间戳转日期；
-- 日期或 ISO 8601 文本转时间戳。
+- 数字日期、中文日期或 ISO 8601 文本转时间戳。
 
 它支持“跟随系统 / UTC”时区和“标准 / ISO 8601 / 中文”显示格式。卸载只删除 ClipAll 管理的安装副本，不会删除 App 内的示例资源或用户选择的源目录。
 
@@ -71,5 +71,7 @@ var ClipAllPlugin = {
 
 - plugin ID 使用反向域名格式；capability ID 必须以 plugin ID 为前缀。
 - 已发布 ID 不应复用或改义，否则用户固定项和配置无法稳定迁移。
+- 插件自身使用三段 SemVer；增加兼容输入格式应提升 minor 版本，并保持 plugin/capability ID 不变。
+- `manifestVersion` 只表示清单合同；使用宿主新字段时同步提高 `minimumClipAllVersion`。
 - handler 必须是纯函数式行为：相同文本、配置、locale 与时区应产生相同结果。
 - 不依赖宽松的日期、URL 或数字解析；无效或歧义输入应返回明确错误。

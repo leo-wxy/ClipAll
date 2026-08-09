@@ -61,7 +61,11 @@ final class SelectionMonitor {
 
         mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.scheduleCapture(after: .milliseconds(45), allowsDuplicate: false)
+                self?.scheduleCapture(
+                    after: .milliseconds(45),
+                    allowsDuplicate: false,
+                    includesEditableContent: false
+                )
             }
         }
         installHotKeyHandlerIfNeeded()
@@ -94,12 +98,21 @@ final class SelectionMonitor {
     }
 
     func captureNow() {
-        scheduleCapture(after: .zero, allowsDuplicate: true, requiresRunning: false)
+        scheduleCapture(
+            after: .zero,
+            allowsDuplicate: true,
+            includesEditableContent: true,
+            requiresRunning: false
+        )
     }
 
     fileprivate func handleRegisteredHotKey() {
         guard isRunning else { return }
-        scheduleCapture(after: .milliseconds(20), allowsDuplicate: true)
+        scheduleCapture(
+            after: .milliseconds(20),
+            allowsDuplicate: true,
+            includesEditableContent: true
+        )
     }
 
     private func installHotKeyHandlerIfNeeded() {
@@ -157,6 +170,7 @@ final class SelectionMonitor {
     private func scheduleCapture(
         after delay: Duration,
         allowsDuplicate: Bool,
+        includesEditableContent: Bool,
         requiresRunning: Bool = true
     ) {
         guard isRunning || !requiresRunning else { return }
@@ -169,7 +183,8 @@ final class SelectionMonitor {
                 }
                 try Task.checkCancellation()
                 let context = try captureService.captureCurrentSelection(
-                    triggerLocation: NSEvent.mouseLocation
+                    triggerLocation: NSEvent.mouseLocation,
+                    includesEditableContent: includesEditableContent
                 )
                 guard !Task.isCancelled, self.isRunning || !requiresRunning else { return }
                 guard allowsDuplicate || shouldPublish(context) else { return }
