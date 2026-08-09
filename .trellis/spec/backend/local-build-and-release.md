@@ -30,7 +30,7 @@ and launches that path.
   symbolic-link destination, stages in `/Applications`, and backs up the prior
   bundle before replacement.
 - Local builds use `ClipAll Local Development`. `CLIPALL_ADHOC=1` is CI-only.
-- A `vX.Y.Z` tag must exactly equal `v$(<VERSION)` before creating a prerelease.
+- A `vX.Y.Z` tag must exactly equal `v$(<VERSION)` before creating a latest release.
 - `package-release.sh` accepts only a verified `.build/ClipAll.app` whose bundle
   version equals `VERSION`, then emits arm64 ad-hoc DMG and zip artifacts plus
   one SHA-256 file for each artifact.
@@ -49,7 +49,7 @@ and launches that path.
 | Tag differs from VERSION | release job exits before packaging |
 | Bundle signature or version is invalid | packaging exits before creating artifacts |
 | Release packaging succeeds | verify DMG and publish DMG, zip, and both checksums |
-| CI artifact | mark arm64, ad-hoc, prerelease, and not notarized |
+| CI artifact | mark arm64, ad-hoc, latest release, and not notarized |
 
 ## 5. Good / Base / Bad Cases
 

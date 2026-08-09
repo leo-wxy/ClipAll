@@ -8,7 +8,7 @@
 
 - 外置插件可在 `routingRules.inputMatchers` 中声明受限的 `dateFormat` 输入格式，无需把插件日期格式硬编码进宿主。
 - 时间工具插件 `1.1.0` 支持 `yyyy年M月d日` 和中文日期时间输入。
-- GitHub prerelease 同时提供带 Applications 快捷入口的 DMG、备用 zip 与校验文件。
+- GitHub Release 同时提供带 Applications 快捷入口的 DMG、备用 zip 与校验文件。
 
 ### Fixed
 

@@ -6,7 +6,7 @@
 
 <p align="center">面向 macOS 的本地选词能力平台：选中文字，立即复制、粘贴、搜索、翻译或交给插件处理。</p>
 
-> 当前开发版本为 `0.0.3`，最新公开 prerelease 为 `0.0.2`。Release 仅用于体验和测试，不是 Developer ID 签名或公证的正式分发包。
+> 当前版本与最新公开 Release 均为 `0.0.3`。Release 仅用于体验和测试，不是 Developer ID 签名或公证的正式分发包。
 
 ## 功能
 
@@ -142,7 +142,7 @@ Scripts/                    # 构建、签名与验证入口
 
 ## 当前限制
 
-- 仅支持 macOS 15+；公开 Release 是 arm64 ad-hoc prerelease，不是 Developer ID/notarized 发布包。
+- 仅支持 macOS 15+；公开 Release 是 arm64 ad-hoc 构建，不是 Developer ID/notarized 发布包。
 - 外置插件 v1 只支持本地结果面板，不支持 secret、自定义 UI、打开 URL 或后台任务。
 - Runner 默认执行超时为 750 ms，并限制请求、响应、日志和结果项大小。
 - 本地构建会随 Swift SDK 和签名身份变化，不保证 bit-for-bit 可复现。

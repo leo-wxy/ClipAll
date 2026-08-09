@@ -56,6 +56,6 @@ App 第一次取词需要“系统设置 → 隐私与安全性 → 辅助功能
 
 ## Release 限制
 
-推送形如 `vX.Y.Z` 的 tag 会由 GitHub Actions 在 `macos-15` arm64 runner 上检查 tag 与 `VERSION` 一致性、运行完整验证并构建 ad-hoc prerelease。发布同时提供带 Applications 快捷入口的 DMG、备用 zip 和各自 SHA-256 校验文件；流程不使用 Developer ID 签名，也不执行 notarization。
+推送形如 `vX.Y.Z` 的 tag 会由 GitHub Actions 在 `macos-15` arm64 runner 上检查 tag 与 `VERSION` 一致性、运行完整验证并构建 Latest Release。发布同时提供带 Applications 快捷入口的 ad-hoc DMG、备用 zip 和各自 SHA-256 校验文件；流程不使用 Developer ID 签名，也不执行 notarization。
 
 因此下载的 Release 可能触发 Gatekeeper 的“无法验证开发者”提示，用户需要在 Finder 中明确允许打开，并自行确认来源可信。首次取词还必须在“系统设置 → 隐私与安全性 → 辅助功能”中授权 ClipAll；ad-hoc 身份或替换 App 后，macOS 可能要求重新授权。正式签名、公证、自动更新和生产分发属于后续工作。
