@@ -1,0 +1,10 @@
+.build/
+.swift-module-cache/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+
+# Swift/SwiftPM atomic-save leftovers occasionally created at repository root.
+/(A Document Being Saved By swift-*)/

@@ -1,0 +1,84 @@
+{
+  "manifestVersion": 1,
+  "id": "com.clipall.plugin.timestamp-tools",
+  "name": "时间工具",
+  "version": "1.0.0",
+  "minimumClipAllVersion": "0.1.0",
+  "summary": "日期与 Unix 时间戳之间的本地双向转换。",
+  "symbolName": "clock.arrow.2.circlepath",
+  "runtime": {
+    "kind": "javascriptCore",
+    "entry": "main.js"
+  },
+  "configuration": [
+    {
+      "id": "timeZone",
+      "title": "时区",
+      "summary": "用于显示日期，以及解释未携带时区的日期文本。",
+      "type": "choice",
+      "defaultValue": "system",
+      "options": [
+        { "id": "system", "title": "系统时区" },
+        { "id": "utc", "title": "UTC" }
+      ]
+    },
+    {
+      "id": "displayFormat",
+      "title": "日期显示格式",
+      "summary": "只影响日期结果的展示，不改变输入解析规则。",
+      "type": "choice",
+      "defaultValue": "standard",
+      "options": [
+        { "id": "standard", "title": "标准 · 2024-04-05 19:34:38 +00:00" },
+        { "id": "iso8601", "title": "ISO 8601 · 2024-04-05T19:34:38.000Z" },
+        { "id": "chinese", "title": "中文 · 2024年04月05日 19:34:38" }
+      ]
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "com.clipall.plugin.timestamp-tools.timestamp-to-date",
+      "name": "时间戳 → 日期",
+      "symbolName": "calendar.badge.clock",
+      "purpose": "把明确的 10 位秒级或 13 位毫秒级 Unix 时间戳转换为日期。",
+      "supportedContentKinds": [
+        "unixTimestampSeconds",
+        "unixTimestampMilliseconds"
+      ],
+      "examples": ["1712345678", "1712345678000"],
+      "exclusions": ["含字母或小数点的数字", "不是 10 位或 13 位的数字", "超出 Date 范围的数值"],
+      "executionKind": "resultPanel",
+      "handler": "timestampToDate",
+      "routingRules": [
+        {
+          "contentKind": "unixTimestampSeconds",
+          "score": 96,
+          "reason": "检测到 10 位 Unix 秒级时间戳"
+        },
+        {
+          "contentKind": "unixTimestampMilliseconds",
+          "score": 98,
+          "reason": "检测到 13 位 Unix 毫秒时间戳"
+        }
+      ]
+    },
+    {
+      "id": "com.clipall.plugin.timestamp-tools.date-to-timestamp",
+      "name": "日期 → 时间戳",
+      "symbolName": "number.square",
+      "purpose": "把 ISO 8601 或明确的常见日期格式转换为 Unix 秒和毫秒时间戳。",
+      "supportedContentKinds": ["dateTime"],
+      "examples": ["2024-04-05T19:34:38Z", "2024-04-05 19:34:38", "2024/04/05 19:34:38"],
+      "exclusions": ["只有年份或月份", "自然语言相对日期", "无效或自动进位后的日期"],
+      "executionKind": "resultPanel",
+      "handler": "dateToTimestamp",
+      "routingRules": [
+        {
+          "contentKind": "dateTime",
+          "score": 97,
+          "reason": "检测到明确的日期时间格式"
+        }
+      ]
+    }
+  ]
+}

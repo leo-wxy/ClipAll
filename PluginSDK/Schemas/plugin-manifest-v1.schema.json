@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clipall.local/schemas/plugin-manifest-v1.schema.json",
+  "title": "ClipAll Plugin Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "manifestVersion",
+    "id",
+    "name",
+    "version",
+    "minimumClipAllVersion",
+    "summary",
+    "symbolName",
+    "runtime",
+    "configuration",
+    "capabilities"
+  ],
+  "properties": {
+    "manifestVersion": { "const": 1 },
+    "id": { "$ref": "#/$defs/pluginIdentifier" },
+    "name": { "$ref": "#/$defs/nonEmptyDisplayString" },
+    "version": { "$ref": "#/$defs/semanticVersion" },
+    "minimumClipAllVersion": { "$ref": "#/$defs/semanticVersion" },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "symbolName": { "$ref": "#/$defs/symbolName" },
+    "runtime": { "$ref": "#/$defs/runtime" },
+    "configuration": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/configurationField" }
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/capability" }
+    }
+  },
+  "$defs": {
+    "pluginIdentifier": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z][A-Za-z0-9-]*(\\.[A-Za-z0-9][A-Za-z0-9-]*)+$"
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z][A-Za-z0-9._-]*$"
+    },
+    "handlerIdentifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$"
+    },
+    "semanticVersion": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "nonEmptyDisplayString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "symbolName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[A-Za-z0-9.-]+$"
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "entry"],
+      "properties": {
+        "kind": { "const": "javascriptCore" },
+        "entry": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 240,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+\\.js$"
+        }
+      }
+    },
+    "configurationCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fieldID", "equals"],
+      "properties": {
+        "fieldID": { "$ref": "#/$defs/identifier" },
+        "equals": { "type": ["string", "boolean"] }
+      }
+    },
+    "choiceOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "title": { "$ref": "#/$defs/nonEmptyDisplayString" }
+      }
+    },
+    "choiceField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "type", "defaultValue", "options"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "title": { "$ref": "#/$defs/nonEmptyDisplayString" },
+        "summary": { "type": "string", "maxLength": 240 },
+        "type": { "const": "choice" },
+        "defaultValue": { "type": "string" },
+        "options": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/choiceOption" }
+        },
+        "visibleWhen": { "$ref": "#/$defs/configurationCondition" }
+      }
+    },
+    "toggleField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "type", "defaultValue"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "title": { "$ref": "#/$defs/nonEmptyDisplayString" },
+        "summary": { "type": "string", "maxLength": 240 },
+        "type": { "const": "toggle" },
+        "defaultValue": { "type": "boolean" },
+        "visibleWhen": { "$ref": "#/$defs/configurationCondition" }
+      }
+    },
+    "textField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "type", "defaultValue"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "title": { "$ref": "#/$defs/nonEmptyDisplayString" },
+        "summary": { "type": "string", "maxLength": 240 },
+        "type": { "const": "text" },
+        "defaultValue": { "type": "string", "maxLength": 4096 },
+        "placeholder": { "type": "string", "maxLength": 240 },
+        "visibleWhen": { "$ref": "#/$defs/configurationCondition" }
+      }
+    },
+    "configurationField": {
+      "oneOf": [
+        { "$ref": "#/$defs/choiceField" },
+        { "$ref": "#/$defs/toggleField" },
+        { "$ref": "#/$defs/textField" }
+      ]
+    },
+    "routingRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contentKind", "score", "reason"],
+      "properties": {
+        "contentKind": {
+          "enum": [
+            "text",
+            "foreignLanguage",
+            "url",
+            "email",
+            "code",
+            "address",
+            "unixTimestampSeconds",
+            "unixTimestampMilliseconds",
+            "dateTime"
+          ]
+        },
+        "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 120 }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "symbolName",
+        "purpose",
+        "supportedContentKinds",
+        "examples",
+        "exclusions",
+        "executionKind",
+        "handler",
+        "routingRules"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "name": { "$ref": "#/$defs/nonEmptyDisplayString" },
+        "symbolName": { "$ref": "#/$defs/symbolName" },
+        "purpose": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "supportedContentKinds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/routingRule/properties/contentKind" }
+        },
+        "examples": {
+          "type": "array",
+          "maxItems": 12,
+          "items": { "type": "string", "maxLength": 240 }
+        },
+        "exclusions": {
+          "type": "array",
+          "maxItems": 12,
+          "items": { "type": "string", "maxLength": 240 }
+        },
+        "executionKind": { "const": "resultPanel" },
+        "handler": { "$ref": "#/$defs/handlerIdentifier" },
+        "routingRules": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/routingRule" }
+        }
+      }
+    }
+  }
+}

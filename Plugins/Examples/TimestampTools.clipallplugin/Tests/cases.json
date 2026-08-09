@@ -1,0 +1,103 @@
+[
+  {
+    "name": "秒级时间戳转换为 UTC 标准格式",
+    "capabilityID": "com.clipall.plugin.timestamp-tools.timestamp-to-date",
+    "input": "1712345678",
+    "configuration": { "timeZone": "utc", "displayFormat": "standard" },
+    "expect": {
+      "itemValues": {
+        "formatted": "2024-04-05 19:34:38 +00:00",
+        "utc": "2024-04-05T19:34:38.000Z"
+      }
+    }
+  },
+  {
+    "name": "毫秒级时间戳转换为 ISO 8601",
+    "capabilityID": "com.clipall.plugin.timestamp-tools.timestamp-to-date",
+    "input": "1712345678000",
+    "configuration": { "timeZone": "utc", "displayFormat": "iso8601" },
+    "expect": {
+      "itemValues": { "formatted": "2024-04-05T19:34:38.000Z" }
+    }
+  },
+  {
+    "name": "毫秒级时间戳转换为中文格式",
+    "capabilityID": "com.clipall.plugin.timestamp-tools.timestamp-to-date",
+    "input": "1712345678000",
+    "configuration": { "timeZone": "utc", "displayFormat": "chinese" },
+    "expect": {
+      "itemValues": { "formatted": "2024年04月05日 19:34:38" }
+    }
+  },
+  {
+    "name": "系统时区使用请求中的 IANA 时区",
+    "capabilityID": "com.clipall.plugin.timestamp-tools.timestamp-to-date",
+    "input": "1712345678000",
+    "configuration": { "timeZone": "system", "displayFormat": "chinese" },
+    "systemTimeZoneIdentifier": "Asia/Shanghai",
+    "expect": {
+      "itemValues": { "formatted": "2024年04月06日 03:34:38" }
+    }
+  },
+  {
+    "name": "UTC 日期转换为双精度时间戳",
+    "capabilityID": "com.clipall.plugin.timestamp-tools.date-to-timestamp",
+    "input": "2024-04-05T19:34:38Z",
+    "configuration": { "timeZone": "utc", "displayFormat": "standard" },
+    "expect": {
+      "itemValues": {
+        "seconds": "1712345678",
+        "milliseconds": "1712345678000"
+      }
+    }
+  },
+  {
+    "name": "无时区日期按 UTC 解释",
+    "capabilityID": "com.clipall.plugin.timestamp-tools.date-to-timestamp",
+    "input": "2024-04-05 19:34:38",
+    "configuration": { "timeZone": "utc", "displayFormat": "iso8601" },
+    "expect": {
+      "subtitle": "未提供时区，按 UTC 解释",
+      "itemValues": { "seconds": "1712345678" }
+    }
+  },
+  {
+    "name": "带偏移 ISO 日期",
+    "capabilityID": "com.clipall.plugin.timestamp-tools.date-to-timestamp",
+    "input": "2024-04-05T19:34:38+08:00",
+    "configuration": { "timeZone": "utc", "displayFormat": "iso8601" },
+    "expect": {
+      "itemValues": { "seconds": "1712316878" }
+    }
+  },
+  {
+    "name": "拒绝无效闰日",
+    "capabilityID": "com.clipall.plugin.timestamp-tools.date-to-timestamp",
+    "input": "2023-02-29",
+    "configuration": { "timeZone": "utc", "displayFormat": "standard" },
+    "expectError": "invalid_input"
+  },
+  {
+    "name": "拒绝模糊短数字",
+    "capabilityID": "com.clipall.plugin.timestamp-tools.timestamp-to-date",
+    "input": "1234",
+    "configuration": { "timeZone": "utc", "displayFormat": "standard" },
+    "expectError": "invalid_input"
+  },
+  {
+    "name": "拒绝夏令时跳跃中不存在的时间",
+    "capabilityID": "com.clipall.plugin.timestamp-tools.date-to-timestamp",
+    "input": "2024-03-10 02:30:00",
+    "configuration": { "timeZone": "system", "displayFormat": "standard" },
+    "systemTimeZoneIdentifier": "America/New_York",
+    "expectError": "invalid_input"
+  },
+  {
+    "name": "拒绝夏令时回拨产生的歧义时间",
+    "capabilityID": "com.clipall.plugin.timestamp-tools.date-to-timestamp",
+    "input": "2024-11-03 01:30:00",
+    "configuration": { "timeZone": "system", "displayFormat": "standard" },
+    "systemTimeZoneIdentifier": "America/New_York",
+    "expectError": "invalid_input"
+  }
+]

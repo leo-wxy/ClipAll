@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 54 32">
+  <g fill="#000000">
+    <rect x="3.25" y="1" width="2.4" height="30" rx="1.2" />
+    <rect x="0.4" y="1" width="8.1" height="2.4" rx="1.2" />
+    <rect x="0.4" y="28.6" width="8.1" height="2.4" rx="1.2" />
+
+    <circle cx="13.3" cy="16" r="2.4" />
+
+    <path
+      fill-rule="evenodd"
+      transform="matrix(.840336 0 0 -.840336 18.576 25)"
+      d="M8.01 21.42H12L20.25 0h-4.02l-2.01 5.67H5.67L3.66 0H-.21L8.01 21.42Zm-1.32-12.9h6.54l-3.21 9.21h-.09L6.69 8.52Z"
+    />
+
+    <circle cx="40.696" cy="16" r="2.4" />
+
+    <rect x="48.346" y="1" width="2.4" height="30" rx="1.2" />
+    <rect x="45.496" y="1" width="8.1" height="2.4" rx="1.2" />
+    <rect x="45.496" y="28.6" width="8.1" height="2.4" rx="1.2" />
+  </g>
+</svg>
