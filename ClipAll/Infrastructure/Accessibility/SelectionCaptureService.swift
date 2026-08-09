@@ -177,7 +177,7 @@ final class SelectionCaptureService: SelectionCapturing {
         var markerRange: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
             element,
-            kAXSelectedTextMarkerRangeAttribute as CFString,
+            "AXSelectedTextMarkerRange" as CFString,
             &markerRange
         ) == .success,
         let markerRange,
@@ -187,7 +187,7 @@ final class SelectionCaptureService: SelectionCapturing {
         var value: CFTypeRef?
         guard AXUIElementCopyParameterizedAttributeValue(
             element,
-            kAXBoundsForTextMarkerRangeParameterizedAttribute as CFString,
+            "AXBoundsForTextMarkerRange" as CFString,
             markerRange,
             &value
         ) == .success,
