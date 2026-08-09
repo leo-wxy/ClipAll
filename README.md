@@ -6,7 +6,7 @@
 
 <p align="center">面向 macOS 的本地选词能力平台：选中文字，立即复制、搜索、翻译或交给插件处理。</p>
 
-> 当前处于开发阶段，仅提供源码和本地构建流程，尚无 Release、DMG 或安装器。
+> 当前公开源码版本为 `0.0.1`。Release 是 macOS 15 arm64 的 ad-hoc prerelease，仅用于体验和测试，不是 Developer ID 签名或公证的正式分发包。
 
 ## 功能
 
@@ -32,11 +32,10 @@
 
 ```sh
 ./Scripts/setup-local-signing.sh
-./Scripts/build-local-app.sh
-open .build/ClipAll.app
+./Scripts/install-local-app.sh
 ```
 
-构建产物位于 `.build/ClipAll.app`，其中已嵌入独立 Runner、App 图标、菜单栏图标和可导入的时间工具示例。需要固定放在“应用程序”目录时，可在 Finder 中将这个 App 拖入 `/Applications`。
+安装脚本使用 SwiftPM debug `.build/ClipAll.app` 作为中间产物，完成签名校验后只更新并启动 `/Applications/ClipAll.app`。它会先退出当前 Applications 版本，并将旧 App 备份到临时目录，避免同一 Bundle ID 从两个路径同时运行。App 中已嵌入独立 Runner、图标和可导入的时间工具示例。
 
 第一次取词时，请在“系统设置 → 隐私与安全性 → 辅助功能”中授权 ClipAll。默认快捷键为 `⌃⌥Space`，也可以通过菜单栏手动显示当前选区。
 
@@ -46,12 +45,20 @@ open .build/ClipAll.app
 CLIPALL_ADHOC=1 ./Scripts/build-local-app.sh
 ```
 
+ad-hoc 构建只用于 CI 打包，不作为本地运行入口。
+
+## Release 与系统限制
+
+仓库的 `vX.Y.Z` tag 会触发 GitHub Actions，在 `macos-15` arm64 runner 上执行验证并生成 ad-hoc `.zip` 和 SHA-256 校验文件。该流程不使用 Developer ID，也不执行 notarization；因此从网上下载的 App 可能被 Gatekeeper 阻止，首次打开需要在 Finder 中明确确认，并应只运行你信任的构建产物。
+
+Release App 仍需要用户在“系统设置 → 隐私与安全性 → 辅助功能”中手动授权 ClipAll。ad-hoc 签名不提供稳定的开发者身份，重新下载、替换或重建 App 后 macOS 可能要求重新授权。正式签名、公证、DMG、自动更新和生产分发不在 `0.0.1` 范围内。
+
 ## 使用流程
 
 1. 启动 ClipAll，并确认菜单栏中的监控开关已开启。
 2. 在其他 App 中选择一段文字。
 3. 从浮层执行复制、搜索、翻译、推荐能力，或展开“更多”查找插件。
-4. 在“设置 → 能力”调整固定能力；在“设置 → 插件”管理配置和生命周期。
+4. 在“设置 → 操作栏”调整固定能力；在“设置 → 插件”管理配置和生命周期。
 5. 需要开发插件时，开启开发者模式并加载未打包的 `.clipallplugin` 目录。
 
 复制成功后浮层会立即关闭。搜索和插件能力只会在用户明确点击后执行，路由匹配不会自动运行能力。
@@ -113,6 +120,7 @@ Scripts/                    # 构建、签名与验证入口
 提交前可运行完整 CLT 验收：
 
 ```sh
+./Scripts/check-version.sh
 ./Scripts/verify-all.sh
 ```
 
@@ -133,7 +141,11 @@ Scripts/                    # 构建、签名与验证入口
 
 ## 当前限制
 
-- 仅支持 macOS 15+，当前没有可下载的发布包。
+- 仅支持 macOS 15+；公开 Release 是 arm64 ad-hoc prerelease，不是 Developer ID/notarized 发布包。
 - 外置插件 v1 只支持本地结果面板，不支持 secret、自定义 UI、打开 URL 或后台任务。
 - Runner 默认执行超时为 750 ms，并限制请求、响应、日志和结果项大小。
 - 本地构建会随 Swift SDK 和签名身份变化，不保证 bit-for-bit 可复现。
+
+## 许可证
+
+ClipAll 使用 [MIT License](LICENSE)。

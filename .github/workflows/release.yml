@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require arm64 runner and matching tag
+        id: version
+        shell: zsh
+        run: |
+          [[ "$(uname -m)" == "arm64" ]] || {
+            print -u2 "Releases must be built on an arm64 macOS runner."
+            exit 1
+          }
+          version="$(<VERSION)"
+          expected_tag="v${version}"
+          [[ "${GITHUB_REF_NAME}" == "$expected_tag" ]] || {
+            print -u2 "Tag ${GITHUB_REF_NAME} does not match VERSION ${version}."
+            exit 1
+          }
+          print "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check version consistency
+        run: Scripts/check-version.sh
+
+      - name: Run verification suite
+        run: Scripts/verify-all.sh
+
+      - name: Build ad-hoc app
+        env:
+          CLIPALL_ADHOC: "1"
+        run: Scripts/build-local-app.sh
+
+      - name: Package arm64 artifact and checksum
+        id: package
+        shell: zsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          artifact=".build/ClipAll-${VERSION}-macos-arm64-ad-hoc.zip"
+          ditto -c -k --sequesterRsrc --keepParent ".build/ClipAll.app" "$artifact"
+          (cd "$(dirname "$artifact")" && shasum -a 256 "$(basename "$artifact")") > "$artifact.sha256"
+          print "artifact=$artifact" >> "$GITHUB_OUTPUT"
+          print "checksum=$artifact.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Create prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create --verify-tag --generate-notes --prerelease \
+            "$GITHUB_REF_NAME" \
+            ".build/ClipAll-${VERSION}-macos-arm64-ad-hoc.zip" \
+            ".build/ClipAll-${VERSION}-macos-arm64-ad-hoc.zip.sha256" \
+            --title "ClipAll ${VERSION}"

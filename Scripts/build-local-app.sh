@@ -3,6 +3,10 @@
 set -euo pipefail
 
 PROJECT_ROOT="${0:A:h:h}"
+cd -- "$PROJECT_ROOT"
+
+"$PROJECT_ROOT/Scripts/check-version.sh"
+
 MODULE_CACHE="$PROJECT_ROOT/.swift-module-cache"
 ARCH="$(uname -m)"
 BUILD_DIR="$PROJECT_ROOT/.build/${ARCH}-apple-macosx/debug"

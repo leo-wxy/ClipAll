@@ -235,7 +235,7 @@ Example.clipallplugin/
   "id": "com.clipall.plugin.timestamp-tools",
   "name": "时间工具",
   "version": "1.0.0",
-  "minimumClipAllVersion": "0.1.0",
+  "minimumClipAllVersion": "0.0.1",
   "summary": "日期与 Unix 时间戳双向转换",
   "symbolName": "clock.arrow.2.circlepath",
   "runtime": {

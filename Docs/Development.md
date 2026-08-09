@@ -1,5 +1,11 @@
 # ClipAll 本地开发与验收
 
+当前源码版本由根目录 [`VERSION`](../VERSION) 管理（`0.0.1`）。修改版本时必须同步 `Support/ClipAll-Info.plist` 的 `CFBundleShortVersionString` 和 `CFBundleVersion`，然后运行：
+
+```sh
+./Scripts/check-version.sh
+```
+
 ## 环境
 
 - macOS 15 或更高版本；
@@ -10,23 +16,23 @@
 
 ```sh
 ./Scripts/setup-local-signing.sh  # 仅首次运行
-./Scripts/build-local-app.sh
-open .build/ClipAll.app
+./Scripts/install-local-app.sh
 ```
 
 首次设置会在登录钥匙串创建 `ClipAll Local Development` 本地 Code Signing 身份。后续构建始终复用该身份，使 macOS 在代码变化后仍把它识别为同一个 App。该证书只用于本机开发，不用于分发。
 
-构建脚本会生成 `.build/ClipAll.app`，嵌入 Runner 和可导入的 `TimestampTools.clipallplugin`，使用固定本地身份签名并执行完整性检查。只有一次性 CI 产物需要临时签名时，才显式运行：
+安装脚本先生成并验证 SwiftPM debug `.build/ClipAll.app` 中间包，然后只替换和启动 `/Applications/ClipAll.app`。替换前会退出当前 Applications 版本，并把旧 App 备份到临时目录，避免同一 Bundle ID 从两个路径同时运行。只有一次性 CI 产物需要临时签名时，才直接运行：
 
 ```sh
 CLIPALL_ADHOC=1 ./Scripts/build-local-app.sh
 ```
 
-App 第一次取词需要“系统设置 → 隐私与安全性 → 辅助功能”授权。开发期间请始终从固定路径 `.build/ClipAll.app` 启动；只要本地证书、bundle ID 和路径不变，后续构建无需重复授权。
+App 第一次取词需要“系统设置 → 隐私与安全性 → 辅助功能”授权。开发期间始终运行固定路径 `/Applications/ClipAll.app`；不要启动 `.build` 中间包。只要本地证书、bundle ID 和 Applications 路径不变，后续构建无需重复授权。
 
 ## 自动验证
 
 ```sh
+./Scripts/check-version.sh
 ./Scripts/verify-core.sh
 ./Scripts/verify-plugin.sh Plugins/Examples/TimestampTools.clipallplugin
 ./Scripts/verify-lifecycle.sh Plugins/Examples/TimestampTools.clipallplugin
@@ -47,3 +53,9 @@ App 第一次取词需要“系统设置 → 隐私与安全性 → 辅助功能
 6. 开启开发者模式，加载未打包插件，验证重新载入、当前配置、单次执行、日志和 11 个 fixtures。
 
 系统翻译首次使用可能由 macOS 准备或下载语言模型；AI 翻译只接受带 host 的 HTTPS endpoint，API key 存在 Keychain 中。
+
+## Release 限制
+
+推送形如 `vX.Y.Z` 的 tag 会由 GitHub Actions 在 `macos-15` arm64 runner 上检查 tag 与 `VERSION` 一致性、运行完整验证并构建 ad-hoc prerelease。产物通过 `ditto` 打包并附带 SHA-256 校验文件；流程不使用 Developer ID 签名，也不执行 notarization。
+
+因此下载的 Release 可能触发 Gatekeeper 的“无法验证开发者”提示，用户需要在 Finder 中明确允许打开，并自行确认来源可信。首次取词还必须在“系统设置 → 隐私与安全性 → 辅助功能”中授权 ClipAll；ad-hoc 身份或替换 App 后，macOS 可能要求重新授权。正式签名、公证、DMG、自动更新和生产分发属于后续工作。

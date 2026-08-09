@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: macos-15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Check version consistency
+        run: Scripts/check-version.sh
+
+      - name: Run verification suite
+        run: Scripts/verify-all.sh
+
+      - name: Run XCTest smoke suite
+        run: swift test --disable-sandbox --build-system native
+
+      - name: Build ad-hoc app
+        env:
+          CLIPALL_ADHOC: "1"
+        run: Scripts/build-local-app.sh
