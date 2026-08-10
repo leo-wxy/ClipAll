@@ -1,6 +1,6 @@
 # ClipAll 本地开发与验收
 
-当前源码版本由根目录 [`VERSION`](../VERSION) 管理（`0.0.4`）。修改版本时必须同步 `Support/ClipAll-Info.plist` 的 `CFBundleShortVersionString` 和 `CFBundleVersion`，然后运行：
+当前源码版本由根目录 [`VERSION`](../VERSION) 管理（`0.0.5`）。修改版本时必须同步 `Support/ClipAll-Info.plist` 的 `CFBundleShortVersionString` 和 `CFBundleVersion`，然后运行：
 
 ```sh
 ./Scripts/check-version.sh

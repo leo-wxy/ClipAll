@@ -6,7 +6,7 @@
 
 <p align="center">面向 macOS 的本地选词能力平台：选中文字，立即复制、粘贴、搜索、翻译或交给插件处理。</p>
 
-> 当前版本与最新公开 Release 均为 `0.0.4`。Release 仅用于体验和测试，不是 Developer ID 签名或公证的正式分发包。
+> 当前版本与最新公开 Release 均为 `0.0.5`。Release 仅用于体验和测试，不是 Developer ID 签名或公证的正式分发包。
 
 ## 功能
 
