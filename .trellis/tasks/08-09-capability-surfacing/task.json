@@ -18,7 +18,9 @@
   "commit": null,
   "pr_url": null,
   "subtasks": [],
-  "children": [],
+  "children": [
+    "08-10-cross-app-selection-compatibility"
+  ],
   "parent": null,
   "relatedFiles": [],
   "notes": "",
