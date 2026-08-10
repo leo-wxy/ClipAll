@@ -31,15 +31,41 @@ BUNDLE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString'
 
 /usr/bin/ditto "$APP_PATH" "$STAGING_DIR/ClipAll.app"
 /bin/ln -s /Applications "$STAGING_DIR/Applications"
-/usr/bin/hdiutil create \
+
+verify_dmg() {
+  local attempt
+  for attempt in 1 2 3; do
+    if /usr/bin/hdiutil verify "$DMG_PATH"; then
+      return 0
+    fi
+    if (( attempt < 3 )); then
+      print -u2 "DMG verification attempt $attempt failed; retrying in 2 seconds."
+      /bin/sleep 2
+    fi
+  done
+  return 1
+}
+
+artifacts=("$ZIP_PATH")
+if /usr/bin/hdiutil create \
   -volname "ClipAll" \
   -srcfolder "$STAGING_DIR" \
   -format UDZO \
   -ov \
-  "$DMG_PATH"
-/usr/bin/hdiutil verify "$DMG_PATH"
+  "$DMG_PATH"; then
+  # macOS 15 arm64 runners can return from create before diskimages-helper
+  # releases the image. Give it time to settle before the first verification.
+  /bin/sleep 6
+fi
 
-for artifact in "$ZIP_PATH" "$DMG_PATH"; do
+if [[ -f "$DMG_PATH" ]] && verify_dmg; then
+  artifacts+=("$DMG_PATH")
+else
+  /bin/rm -f -- "$DMG_PATH" "$DMG_PATH.sha256"
+  print -u2 "Warning: this runner cannot create a DMG; the ZIP release artifact is still available."
+fi
+
+for artifact in "${artifacts[@]}"; do
   (
     cd "$(dirname "$artifact")"
     /usr/bin/shasum -a 256 "$(basename "$artifact")"
@@ -47,5 +73,6 @@ for artifact in "$ZIP_PATH" "$DMG_PATH"; do
 done
 
 print "Packaged release artifacts:"
-print "  $ZIP_PATH"
-print "  $DMG_PATH"
+for artifact in "${artifacts[@]}"; do
+  print "  $artifact"
+done

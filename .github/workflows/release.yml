@@ -48,14 +48,23 @@ jobs:
         run: Scripts/package-release.sh
 
       - name: Create release
+        shell: zsh {0}
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          assets=(
+            ".build/ClipAll-${VERSION}-macos-arm64-ad-hoc.zip"
+            ".build/ClipAll-${VERSION}-macos-arm64-ad-hoc.zip.sha256"
+          )
+          if [[ -f ".build/ClipAll-${VERSION}-macos-arm64-ad-hoc.dmg" ]]; then
+            assets+=(
+              ".build/ClipAll-${VERSION}-macos-arm64-ad-hoc.dmg"
+              ".build/ClipAll-${VERSION}-macos-arm64-ad-hoc.dmg.sha256"
+            )
+          fi
+
           gh release create --verify-tag --generate-notes --latest \
             "$GITHUB_REF_NAME" \
-            ".build/ClipAll-${VERSION}-macos-arm64-ad-hoc.zip" \
-            ".build/ClipAll-${VERSION}-macos-arm64-ad-hoc.zip.sha256" \
-            ".build/ClipAll-${VERSION}-macos-arm64-ad-hoc.dmg" \
-            ".build/ClipAll-${VERSION}-macos-arm64-ad-hoc.dmg.sha256" \
+            "${assets[@]}" \
             --title "ClipAll ${VERSION}"

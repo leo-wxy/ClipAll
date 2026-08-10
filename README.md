@@ -20,7 +20,7 @@
 
 [下载最新 Release](https://github.com/leo-wxy/ClipAll/releases/latest)
 
-Release 提供 arm64 DMG 和 ZIP，但使用 ad-hoc 签名且未经 Apple 公证。首次打开可能需要在 Finder 或“系统设置 → 隐私与安全性”中明确允许，并在“辅助功能”中授权 ClipAll。
+Release 始终提供 arm64 ZIP，并在 GitHub Runner 支持磁盘镜像时同时提供 DMG；两者均使用 ad-hoc 签名且未经 Apple 公证。首次打开可能需要在 Finder 或“系统设置 → 隐私与安全性”中明确允许，并在“辅助功能”中授权 ClipAll。
 
 从源码本地安装：
 

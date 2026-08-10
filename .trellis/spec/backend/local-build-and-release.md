@@ -32,8 +32,8 @@ and launches that path.
 - Local builds use `ClipAll Local Development`. `CLIPALL_ADHOC=1` is CI-only.
 - A `vX.Y.Z` tag must exactly equal `v$(<VERSION)` before creating a latest release.
 - `package-release.sh` accepts only a verified `.build/ClipAll.app` whose bundle
-  version equals `VERSION`, then emits arm64 ad-hoc DMG and zip artifacts plus
-  one SHA-256 file for each artifact.
+  version equals `VERSION`, always emits an arm64 ad-hoc zip plus SHA-256, and
+  emits a DMG plus SHA-256 when the runner supports disk-image creation.
 - The DMG contains `ClipAll.app` and an `Applications` symbolic link. Release
   packaging never installs or launches the intermediate App.
 
@@ -48,7 +48,8 @@ and launches that path.
 | Move of staged App fails | restore the backup when possible |
 | Tag differs from VERSION | release job exits before packaging |
 | Bundle signature or version is invalid | packaging exits before creating artifacts |
-| Release packaging succeeds | verify DMG and publish DMG, zip, and both checksums |
+| DMG creation succeeds | verify and publish DMG plus its checksum alongside the zip |
+| Runner cannot create a DMG | publish zip plus its checksum instead of leaving the release empty |
 | CI artifact | mark arm64, ad-hoc, latest release, and not notarized |
 
 ## 5. Good / Base / Bad Cases
@@ -66,8 +67,8 @@ and launches that path.
 - `zsh -n Scripts/*.sh`: assert shell syntax.
 - `Scripts/verify-all.sh`: assert domain, overlay, provider, runner, fixture, and
   lifecycle checks.
-- `Scripts/package-release.sh`: verify the App signature and version, create the
-  DMG/zip pair, verify the DMG, and validate both SHA-256 files.
+- `Scripts/package-release.sh`: verify the App signature and version, always
+  create the zip, attempt and verify the DMG, and validate every emitted SHA-256 file.
 - `swift build --target ClipAll`: assert the app module compiles.
 - CI runs `Scripts/verify-all.sh` and assembles the complete App bundle; do not
   add a tautological XCTest target solely to make `swift test` report success.
