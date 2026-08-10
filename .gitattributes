@@ -7,3 +7,7 @@
 # picking either side (task state lives in task.json, not index.md). See
 # .trellis/spec/cli/backend/directory-structure.md for details.
 .trellis/workspace/*/journal-*.md merge=union
+
+# Development workflow tooling is tracked, but it is not ClipAll product code.
+.trellis/scripts/** linguist-detectable=false
+.codex/hooks/** linguist-detectable=false
