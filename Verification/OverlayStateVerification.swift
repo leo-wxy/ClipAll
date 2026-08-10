@@ -15,8 +15,39 @@ private enum OverlayStateVerificationError: Error, CustomStringConvertible {
 enum OverlayStateVerification {
     static func main() throws {
         try verifyPlacement()
+        try verifyPointerSelectionGesture()
         try verifyEmptyPinnedPersistence()
         print("Overlay state verification passed")
+    }
+
+    private static func verifyPointerSelectionGesture() throws {
+        var gesture = PointerSelectionGesture()
+
+        gesture.begin(at: .zero)
+        try expect(
+            !gesture.end(at: CGPoint(x: 1, y: 1), clickCount: 1),
+            "普通单击不得触发旧高亮选区"
+        )
+
+        gesture.begin(at: .zero)
+        gesture.update(at: CGPoint(x: 8, y: 0))
+        try expect(
+            gesture.end(at: CGPoint(x: 10, y: 0), clickCount: 1),
+            "达到阈值的拖选应触发取词"
+        )
+
+        gesture.begin(at: .zero)
+        try expect(
+            gesture.end(at: .zero, clickCount: 2),
+            "双击选词应触发取词"
+        )
+
+        gesture.begin(at: .zero)
+        gesture.update(at: CGPoint(x: 2, y: 1))
+        try expect(
+            !gesture.end(at: CGPoint(x: 3, y: 1), clickCount: 1),
+            "阈值内的轻微移动仍应视为普通单击"
+        )
     }
 
     private static func verifyPlacement() throws {

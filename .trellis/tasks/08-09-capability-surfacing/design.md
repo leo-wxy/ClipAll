@@ -31,7 +31,7 @@ PopClip 只作为产品行为基准，不作为像素级克隆目标：
 
 ```mermaid
 flowchart LR
-    E["全局鼠标抬起 / 快捷键"] --> C["SelectionCaptureService"]
+    E["指针选择手势 / 注册快捷键"] --> C["SelectionCaptureService"]
     C --> X["SelectionContext"]
     X --> R["CapabilityRouter"]
     G["CapabilityRegistry"] --> R
@@ -335,16 +335,17 @@ runner 使用 JavaScriptCore 创建全新 context，只提供：
 
 ### 4.2 Pointer Flow
 
-1. 使用 `NSEvent.addGlobalMonitorForEvents` 观察全局左键抬起事件。
-2. 进行短暂防抖，等待来源应用提交最新选区。
-3. 从 system-wide Accessibility element 获取 focused UI element。
-4. 读取 `kAXSelectedTextAttribute` 和 selected range。
-5. 使用 `kAXBoundsForRangeParameterizedAttribute` 获取屏幕坐标；失败时退回鼠标位置。
-6. 仅当文字非空且和最近上下文不同，才创建新 `SelectionContext`。
+1. 使用 `NSEvent.addGlobalMonitorForEvents` 观察全局左键按下、拖动和抬起事件。
+2. 通过纯状态机识别真实选择手势：拖动距离达到阈值，或抬起事件的 `clickCount >= 2`；普通单击只重置状态，不读取旧选区。
+3. 进行短暂防抖，等待来源应用提交最新选区。
+4. 优先从 system-wide 或前台应用 Accessibility element 获取 focused UI element；焦点缺失时以鼠标位置命中控件，并沿祖先链查找标准 range 或 Text Marker 选区。
+5. 读取 `kAXSelectedTextAttribute`、selected range 或 Text Marker 对应文本。
+6. 使用 range bounds 获取屏幕坐标；失败时退回鼠标位置。
+7. 仅当文字非空且和最近上下文不同，才创建新 `SelectionContext`。
 
 ### 4.3 Keyboard Flow
 
-全局快捷键触发相同的捕获函数，而不是复制另一套逻辑。快捷键可配置；首版提供默认值，但所有调用最终都进入 `SelectionCaptureService.captureCurrentSelection()`。
+Carbon 注册的全局快捷键触发相同的捕获函数，而不是复制另一套逻辑。快捷键可配置；首版提供默认值，但所有调用最终都进入 `SelectionCaptureService.captureCurrentSelection()`。不得通过普通 `NSEvent.keyDown` 监听实现快捷键，避免来源应用输入事件被重复处理。
 
 ### 4.4 Compatibility Failures
 

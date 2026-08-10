@@ -45,6 +45,7 @@ final class SelectionMonitor {
 
     private var shortcut: GlobalShortcutConfiguration
     private var mouseMonitor: Any?
+    private var pointerGesture = PointerSelectionGesture()
     private var hotKeyRef: EventHotKeyRef?
     private var hotKeyHandlerRef: EventHandlerRef?
     private var captureTask: Task<Void, Never>?
@@ -69,13 +70,26 @@ final class SelectionMonitor {
 
     func start() {
         if mouseMonitor == nil {
-            mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.scheduleCapture(
-                        after: .milliseconds(45),
-                        allowsDuplicate: false,
-                        trigger: .pointer
-                    )
+            mouseMonitor = NSEvent.addGlobalMonitorForEvents(
+                matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
+            ) { [weak self] event in
+                let location = NSEvent.mouseLocation
+                let clickCount = event.clickCount
+                switch event.type {
+                case .leftMouseDown:
+                    Task { @MainActor [weak self] in
+                        self?.pointerGesture.begin(at: location)
+                    }
+                case .leftMouseDragged:
+                    Task { @MainActor [weak self] in
+                        self?.pointerGesture.update(at: location)
+                    }
+                case .leftMouseUp:
+                    Task { @MainActor [weak self] in
+                        self?.handlePointerUp(at: location, clickCount: clickCount)
+                    }
+                default:
+                    break
                 }
             }
         }
@@ -93,6 +107,7 @@ final class SelectionMonitor {
         captureTask?.cancel()
         captureTask = nil
         lastSignature = nil
+        pointerGesture.reset()
 
         if let mouseMonitor {
             NSEvent.removeMonitor(mouseMonitor)
@@ -128,6 +143,16 @@ final class SelectionMonitor {
             after: .milliseconds(20),
             allowsDuplicate: true,
             trigger: .hotKey
+        )
+    }
+
+    private func handlePointerUp(at location: CGPoint, clickCount: Int) {
+        guard isRunning,
+              pointerGesture.end(at: location, clickCount: clickCount) else { return }
+        scheduleCapture(
+            after: .milliseconds(45),
+            allowsDuplicate: false,
+            trigger: .pointer
         )
     }
 

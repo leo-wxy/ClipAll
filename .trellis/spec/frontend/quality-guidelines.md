@@ -41,6 +41,90 @@
 - Copy success dismisses immediately. New visual animation must not delay the
   store's dismissal or intercept source-app key events.
 
+## Scenario: Cross-App Selection Trigger And Capture
+
+### 1. Scope / Trigger
+
+- Apply this contract whenever automatic pointer selection, the global shortcut,
+  or `SelectionCaptureService` changes.
+- The contract prevents stale highlighted text from reopening the overlay and
+  supports custom controls or WebViews that do not expose a system-wide focused
+  element.
+
+### 2. Signatures
+
+- `PointerSelectionGesture.begin(at:)` starts one pointer gesture.
+- `PointerSelectionGesture.update(at:)` records whether movement reaches the
+  four-point drag threshold.
+- `PointerSelectionGesture.end(at:clickCount:) -> Bool` returns whether the
+  gesture is an explicit selection action and always resets its state.
+- `SelectionCapturing.captureCurrentSelection(triggerLocation:)` is the single
+  capture entry used by pointer, registered hotkey, and menu commands.
+
+### 3. Contracts
+
+- Pointer auto-capture runs only after a drag at least four points or a mouse-up
+  with `clickCount >= 2`. A plain click never reads a retained old selection.
+- Keyboard selection is explicit: the Carbon-registered global shortcut may
+  capture, but ordinary `NSEvent.keyDown` must never be monitored or replayed.
+- Resolve AX candidates in this order: system-wide focus, frontmost application
+  focus, then element-at-pointer. For each candidate, inspect a bounded ancestor
+  chain for standard selected text/range and Text Marker selection.
+- Secure text fields fail closed. Selected text is never written to diagnostics;
+  logs may contain only trigger type, AX role, error type, and bounds presence.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+|---|---|
+| Single click with retained highlight | No capture and no overlay |
+| Drag below four points | No capture |
+| Drag at least four points | Capture after the short selection-settle delay |
+| Double/triple click | Capture after mouse-up |
+| Registered hotkey | Capture without pointer-gesture state |
+| Missing system-wide focus | Try frontmost-app focus, then pointer hit-test |
+| Text Marker selection only | Resolve text locally; bounds may fall back to pointer |
+| Secure field | Return `unsupported` and never expose text |
+| No supported selection | Quietly invalidate/dismiss; never reuse old context |
+
+### 5. Good / Base / Bad Cases
+
+- Good: a WebView exposes selection on an `AXGroup`; pointer hit-test plus
+  ancestor traversal resolves it and presents the panel.
+- Base: TextEdit drag selection resolves standard selected text and range.
+- Bad: every global mouse-up captures whatever text remains highlighted.
+- Bad: implementing the shortcut with a normal key monitor, which can duplicate
+  source-app input or interfere with IME composition.
+
+### 6. Tests Required
+
+- `Scripts/verify-overlay-state.sh` asserts single-click rejection, drag
+  threshold behavior, double-click acceptance, and sub-threshold movement.
+- `swift build --target ClipAll` verifies AppKit/Carbon integration compiles.
+- Manual QA must use `/Applications/ClipAll.app`: test TextEdit drag, double
+  click, retained-highlight single click, normal typing, registered shortcut,
+  and at least one custom/WebView control.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```swift
+NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { _ in
+    captureCurrentSelection()
+}
+```
+
+#### Correct
+
+```swift
+NSEvent.addGlobalMonitorForEvents(
+    matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
+) { event in
+    // Feed a bounded gesture state machine; capture only after drag or multi-click.
+}
+```
+
 ## Good / Base / Bad Cases
 
 - Good: expanding keeps the compact action bar fixed and adds content only below

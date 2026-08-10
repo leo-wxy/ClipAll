@@ -17,6 +17,7 @@ swiftc \
   -sdk "$SDK_PATH" \
   -module-cache-path "$MODULE_CACHE" \
   "$PROJECT_ROOT/ClipAll/Domain/Identifiers.swift" \
+  "$PROJECT_ROOT/ClipAll/Infrastructure/Accessibility/PointerSelectionGesture.swift" \
   "$PROJECT_ROOT/ClipAll/Infrastructure/Persistence/SettingsStore.swift" \
   "$PROJECT_ROOT/ClipAll/Features/SelectionOverlay/OverlayPlacement.swift" \
   "$PROJECT_ROOT/Verification/OverlayStateVerification.swift" \
