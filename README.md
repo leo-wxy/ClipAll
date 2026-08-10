@@ -6,7 +6,7 @@
 
 <p align="center">macOS 本地选词工具：选中文字，立即复制、粘贴、搜索、翻译或交给插件处理。</p>
 
-<p align="center">macOS 15+ · Apple Silicon · 当前版本 0.0.5</p>
+<p align="center">macOS 15+ · Apple Silicon · 当前版本 0.0.6</p>
 
 ## 功能
 
