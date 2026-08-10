@@ -1,9 +1,15 @@
 import AppKit
 import Combine
+import OSLog
 import SwiftUI
 
 @MainActor
 final class SelectionOverlayCoordinator {
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "com.wxy.ClipAll",
+        category: "SelectionOverlay"
+    )
+
     private let store: SelectionOverlayStore
     private let panel: SelectionOverlayPanel
     private lazy var hostingController = NSHostingController(
@@ -64,6 +70,9 @@ final class SelectionOverlayCoordinator {
     }
 
     func present(_ context: SelectionContext) {
+        Self.logger.debug(
+            "Overlay presentation requested: hasBounds=\(context.selectionBounds != nil, privacy: .public)"
+        )
         store.present(context)
         synchronizePanel()
     }
@@ -97,7 +106,10 @@ final class SelectionOverlayCoordinator {
         let screen = NSScreen.screens.first(where: { $0.frame.contains(anchor.center) })
             ?? NSScreen.main
             ?? NSScreen.screens.first
-        guard let screen else { return }
+        guard let screen else {
+            Self.logger.error("Overlay presentation failed: no screen available")
+            return
+        }
 
         let availableWidth = max(280, screen.visibleFrame.width - OverlayPlacement.edgeInset * 2)
         let availableHeight = max(80, screen.visibleFrame.height - OverlayPlacement.edgeInset * 2)
@@ -146,6 +158,9 @@ final class SelectionOverlayCoordinator {
         }
         if !wasVisible {
             panel.orderFrontRegardless()
+            Self.logger.debug(
+                "Overlay ordered front: width=\(self.panel.frame.width, privacy: .public), height=\(self.panel.frame.height, privacy: .public)"
+            )
         }
     }
 

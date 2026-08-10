@@ -1,8 +1,14 @@
 import Combine
 import Foundation
+import OSLog
 
 @MainActor
 final class AppEnvironment: ObservableObject {
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "com.wxy.ClipAll",
+        category: "AppEnvironment"
+    )
+
     let settings: SettingsStore
     let configuration: PluginConfigurationStore
     let secrets: PluginSecretStore
@@ -19,6 +25,7 @@ final class AppEnvironment: ObservableObject {
     @Published private(set) var startupIssue: String?
 
     private var hasStarted = false
+    private var startupTask: Task<Void, Never>?
     private var cancellables: Set<AnyCancellable> = []
 
     init(
@@ -121,8 +128,39 @@ final class AppEnvironment: ObservableObject {
     }
 
     func start() async {
+        if let startupTask {
+            await startupTask.value
+            return
+        }
         guard !hasStarted else { return }
+
+        // SwiftUI scene tasks are tied to view lifetime. Retain an independent
+        // startup task so rebuilding the menu-bar label cannot leave the app in
+        // a half-started state with monitoring permanently disabled.
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.performStartup()
+        }
+        startupTask = task
+        await task.value
+    }
+
+    private func performStartup() async {
+        defer { startupTask = nil }
+
+        Self.logger.notice("Application startup began")
+        permissions.refresh()
+        if !permissions.isTrusted, !settings.hasShownPermissionOnboarding {
+            settings.hasShownPermissionOnboarding = true
+            permissions.requestPermission()
+        }
+
+        // Base selection capture must not wait for plugin discovery or repair.
+        // Copy/search/translation remain usable even when an external plugin is
+        // slow or invalid.
         hasStarted = true
+        synchronizeSelectionMonitoring()
+
         await pluginLifecycle.loadInstalled()
         if let bundledTimestampToolsURL {
             do {
@@ -135,12 +173,7 @@ final class AppEnvironment: ObservableObject {
             }
         }
         settings.reconcileCapabilities(availableIDs: Set(registry.descriptors.map(\.id)))
-        permissions.refresh()
-        if !permissions.isTrusted, !settings.hasShownPermissionOnboarding {
-            settings.hasShownPermissionOnboarding = true
-            permissions.requestPermission()
-        }
-        synchronizeSelectionMonitoring()
+        Self.logger.notice("Application startup completed")
     }
 
     func captureSelectionNow() {
@@ -153,10 +186,14 @@ final class AppEnvironment: ObservableObject {
         guard hasStarted,
               settings.isMonitoringEnabled,
               permissions.isTrusted else {
+            Self.logger.notice(
+                "Selection monitoring disabled: started=\(self.hasStarted, privacy: .public), enabled=\(self.settings.isMonitoringEnabled, privacy: .public), trusted=\(self.permissions.isTrusted, privacy: .public)"
+            )
             selectionMonitor.stop()
             overlayCoordinator.dismiss()
             return
         }
+        Self.logger.notice("Selection monitoring requested")
         selectionMonitor.start()
     }
 

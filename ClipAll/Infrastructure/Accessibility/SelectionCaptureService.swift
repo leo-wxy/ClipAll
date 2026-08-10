@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import Foundation
+import OSLog
 
 enum SelectionCaptureError: Error, LocalizedError, Equatable, Sendable {
     case permissionRequired
@@ -32,6 +33,16 @@ protocol SelectionCapturing: AnyObject {
 
 @MainActor
 final class SelectionCaptureService: SelectionCapturing {
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "com.wxy.ClipAll",
+        category: "SelectionCapture"
+    )
+
+    private struct CapturedSelection {
+        let text: String
+        let bounds: CGRect?
+    }
+
     private let systemWideElement: AXUIElement
 
     init(systemWideElement: AXUIElement = AXUIElementCreateSystemWide()) {
@@ -45,14 +56,6 @@ final class SelectionCaptureService: SelectionCapturing {
             throw SelectionCaptureError.permissionRequired
         }
 
-        let focusedElement = try focusedUIElement()
-        if isSecureTextElement(focusedElement) {
-            throw SelectionCaptureError.unsupported
-        }
-        let selectedRange = selectedTextRange(in: focusedElement)
-        let selectedText = try selectedText(in: focusedElement, selectedRange: selectedRange)
-        let bounds = textMarkerSelectionBounds(in: focusedElement)
-            ?? selectedRange.flatMap { selectionBounds(for: $0, in: focusedElement) }
         let source = NSWorkspace.shared.frontmostApplication
 
         if let sourceBundleIdentifier = source?.bundleIdentifier,
@@ -61,11 +64,16 @@ final class SelectionCaptureService: SelectionCapturing {
             throw SelectionCaptureError.noSelection
         }
 
+        let selection = try capturedSelection(
+            triggerLocation: triggerLocation,
+            sourceApplication: source
+        )
+
         guard let context = SelectionContext(
-            text: selectedText,
+            text: selection.text,
             sourceBundleIdentifier: source?.bundleIdentifier,
             sourceApplicationName: source?.localizedName,
-            selectionBounds: bounds,
+            selectionBounds: selection.bounds,
             triggerLocation: triggerLocation
         ) else {
             throw SelectionCaptureError.noSelection
@@ -87,6 +95,123 @@ final class SelectionCaptureService: SelectionCapturing {
         return unsafeDowncast(value, to: AXUIElement.self)
     }
 
+    private func focusedUIElement(in root: AXUIElement) -> AXUIElement? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            root,
+            kAXFocusedUIElementAttribute as CFString,
+            &value
+        ) == .success,
+        let value,
+        CFGetTypeID(value) == AXUIElementGetTypeID()
+        else { return nil }
+        return unsafeDowncast(value, to: AXUIElement.self)
+    }
+
+    private func capturedSelection(
+        triggerLocation: CGPoint,
+        sourceApplication: NSRunningApplication?
+    ) throws -> CapturedSelection {
+        var candidates: [AXUIElement] = []
+
+        if let focused = try? focusedUIElement() {
+            appendUnique(focused, to: &candidates)
+        }
+
+        if let sourceApplication {
+            let applicationElement = AXUIElementCreateApplication(sourceApplication.processIdentifier)
+            if let focused = focusedUIElement(in: applicationElement) {
+                appendUnique(focused, to: &candidates)
+            }
+        }
+
+        if let hitElement = element(at: triggerLocation) {
+            appendUnique(hitElement, to: &candidates)
+        }
+
+        guard !candidates.isEmpty else {
+            throw SelectionCaptureError.noFocusedElement
+        }
+
+        var finalError = SelectionCaptureError.unsupported
+        for candidate in candidates {
+            do {
+                return try capturedSelection(startingAt: candidate)
+            } catch let error as SelectionCaptureError {
+                if error == .noSelection {
+                    finalError = .noSelection
+                }
+            }
+        }
+
+        throw finalError
+    }
+
+    private func appendUnique(_ element: AXUIElement, to elements: inout [AXUIElement]) {
+        guard !elements.contains(where: { CFEqual($0, element) }) else { return }
+        elements.append(element)
+    }
+
+    private func element(at appKitPoint: CGPoint) -> AXUIElement? {
+        let accessibilityPoint = accessibilityPoint(fromAppKitPoint: appKitPoint)
+        var element: AXUIElement?
+        guard AXUIElementCopyElementAtPosition(
+            systemWideElement,
+            Float(accessibilityPoint.x),
+            Float(accessibilityPoint.y),
+            &element
+        ) == .success else { return nil }
+        return element
+    }
+
+    private func capturedSelection(startingAt focusedElement: AXUIElement) throws -> CapturedSelection {
+        var candidate: AXUIElement? = focusedElement
+        var finalError = SelectionCaptureError.unsupported
+
+        // Web views and custom text controls often expose the active selection
+        // on an ancestor (for example AXWebArea) rather than the focused child.
+        // Keep traversal bounded so a malformed accessibility tree cannot stall
+        // the main actor.
+        for depth in 0..<32 {
+            guard let element = candidate else { break }
+            if isSecureTextElement(element) {
+                throw SelectionCaptureError.unsupported
+            }
+            let selectedRange = selectedTextRange(in: element)
+            let markerRange = selectedTextMarkerRange(in: element)
+
+            do {
+                let text = try selectedText(
+                    in: element,
+                    selectedRange: selectedRange,
+                    markerRange: markerRange
+                )
+                let bounds = markerRange.flatMap {
+                    selectionBounds(forTextMarkerRange: $0, in: element)
+                } ?? selectedRange.flatMap {
+                    selectionBounds(for: $0, in: element)
+                }
+                Self.logger.debug(
+                    "Selection source resolved: ancestorDepth=\(depth, privacy: .public), role=\(self.role(of: element), privacy: .public), markerRange=\(markerRange != nil, privacy: .public), hasBounds=\(bounds != nil, privacy: .public)"
+                )
+                return CapturedSelection(text: text, bounds: bounds)
+            } catch let error as SelectionCaptureError {
+                switch error {
+                case .noSelection:
+                    finalError = .noSelection
+                case .unsupported:
+                    break
+                default:
+                    finalError = error
+                }
+            }
+
+            candidate = parent(of: element)
+        }
+
+        throw finalError
+    }
+
     private func isSecureTextElement(_ element: AXUIElement) -> Bool {
         var subroleValue: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
@@ -102,7 +227,8 @@ final class SelectionCaptureService: SelectionCapturing {
 
     private func selectedText(
         in element: AXUIElement,
-        selectedRange: CFRange?
+        selectedRange: CFRange?,
+        markerRange: CFTypeRef?
     ) throws -> String {
         var value: CFTypeRef?
         let error = AXUIElementCopyAttributeValue(
@@ -112,6 +238,12 @@ final class SelectionCaptureService: SelectionCapturing {
         )
         if error == .success, let text = value as? String, !text.isEmpty {
             return text
+        }
+
+        if let markerRange,
+           let fallback = selectedTextFromMarkerRange(in: element, markerRange: markerRange),
+           !fallback.isEmpty {
+            return fallback
         }
 
         if let selectedRange,
@@ -128,6 +260,35 @@ final class SelectionCaptureService: SelectionCapturing {
         default:
             throw map(error)
         }
+    }
+
+    private func selectedTextMarkerRange(in element: AXUIElement) -> CFTypeRef? {
+        var markerRange: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            element,
+            "AXSelectedTextMarkerRange" as CFString,
+            &markerRange
+        ) == .success,
+        let markerRange,
+        CFGetTypeID(markerRange) == AXTextMarkerRangeGetTypeID()
+        else { return nil }
+        return markerRange
+    }
+
+    private func selectedTextFromMarkerRange(
+        in element: AXUIElement,
+        markerRange: CFTypeRef
+    ) -> String? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(
+            element,
+            "AXStringForTextMarkerRange" as CFString,
+            markerRange,
+            &value
+        ) == .success,
+        let text = value as? String
+        else { return nil }
+        return text
     }
 
     private func selectedTextRange(in element: AXUIElement) -> CFRange? {
@@ -191,17 +352,10 @@ final class SelectionCaptureService: SelectionCapturing {
         return appKitRect(fromAccessibilityRect: rect)
     }
 
-    private func textMarkerSelectionBounds(in element: AXUIElement) -> CGRect? {
-        var markerRange: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
-            element,
-            "AXSelectedTextMarkerRange" as CFString,
-            &markerRange
-        ) == .success,
-        let markerRange,
-        CFGetTypeID(markerRange) == AXTextMarkerRangeGetTypeID()
-        else { return nil }
-
+    private func selectionBounds(
+        forTextMarkerRange markerRange: CFTypeRef,
+        in element: AXUIElement
+    ) -> CGRect? {
         var value: CFTypeRef?
         guard AXUIElementCopyParameterizedAttributeValue(
             element,
@@ -218,6 +372,31 @@ final class SelectionCaptureService: SelectionCapturing {
         var rect = CGRect.zero
         guard AXValueGetValue(axValue, .cgRect, &rect), !rect.isEmpty else { return nil }
         return appKitRect(fromAccessibilityRect: rect)
+    }
+
+    private func parent(of element: AXUIElement) -> AXUIElement? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            element,
+            kAXParentAttribute as CFString,
+            &value
+        ) == .success,
+        let value,
+        CFGetTypeID(value) == AXUIElementGetTypeID()
+        else { return nil }
+        return unsafeDowncast(value, to: AXUIElement.self)
+    }
+
+    private func role(of element: AXUIElement) -> String {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            element,
+            kAXRoleAttribute as CFString,
+            &value
+        ) == .success,
+        let role = value as? String
+        else { return "unknown" }
+        return role
     }
 
     private func appKitRect(fromAccessibilityRect rect: CGRect) -> CGRect {
@@ -243,6 +422,22 @@ final class SelectionCaptureService: SelectionCapturing {
             width: rect.width,
             height: rect.height
         )
+    }
+
+    private func accessibilityPoint(fromAppKitPoint point: CGPoint) -> CGPoint {
+        for screen in NSScreen.screens where screen.frame.contains(point) {
+            guard let number = screen.deviceDescription[
+                NSDeviceDescriptionKey("NSScreenNumber")
+            ] as? NSNumber else { continue }
+            let quartzFrame = CGDisplayBounds(CGDirectDisplayID(number.uint32Value))
+            return CGPoint(
+                x: quartzFrame.minX + point.x - screen.frame.minX,
+                y: quartzFrame.minY + screen.frame.maxY - point.y
+            )
+        }
+
+        guard let primaryScreen = NSScreen.screens.first else { return point }
+        return CGPoint(x: point.x, y: primaryScreen.frame.maxY - point.y)
     }
 
     private func map(_ error: AXError) -> SelectionCaptureError {

@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import Foundation
+import OSLog
 
 private let clipAllHotKeySignature: OSType = 0x434C_5041 // "CLPA"
 private let clipAllHotKeyIdentifier: UInt32 = 1
@@ -16,6 +17,11 @@ private let clipAllHotKeyHandler: EventHandlerUPP = { _, _, userData in
 
 @MainActor
 final class SelectionMonitor {
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "com.wxy.ClipAll",
+        category: "SelectionMonitor"
+    )
+
     typealias SelectionHandler = @MainActor (SelectionContext) -> Void
     typealias PermissionHandler = @MainActor () -> Void
     typealias InvalidationHandler = @MainActor () -> Void
@@ -24,6 +30,12 @@ final class SelectionMonitor {
         let text: String
         let sourceBundleIdentifier: String?
         let bounds: CGRect?
+    }
+
+    private enum CaptureTrigger: String {
+        case pointer
+        case hotKey
+        case manual
     }
 
     private let captureService: any SelectionCapturing
@@ -56,23 +68,27 @@ final class SelectionMonitor {
     }
 
     func start() {
-        guard !isRunning else { return }
-        isRunning = true
-
-        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.scheduleCapture(
-                    after: .milliseconds(45),
-                    allowsDuplicate: false
-                )
+        if mouseMonitor == nil {
+            mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.scheduleCapture(
+                        after: .milliseconds(45),
+                        allowsDuplicate: false,
+                        trigger: .pointer
+                    )
+                }
             }
         }
-        installHotKeyHandlerIfNeeded()
-        registerHotKey()
+
+        let handlerStatus = installHotKeyHandlerIfNeeded()
+        let hotKeyStatus = handlerStatus == noErr ? registerHotKey() : handlerStatus
+        isRunning = mouseMonitor != nil || hotKeyRef != nil
+        Self.logger.notice(
+            "Selection monitor registration: running=\(self.isRunning, privacy: .public), pointer=\(self.mouseMonitor != nil, privacy: .public), hotKey=\(self.hotKeyRef != nil, privacy: .public), handlerStatus=\(handlerStatus, privacy: .public), hotKeyStatus=\(hotKeyStatus, privacy: .public)"
+        )
     }
 
     func stop() {
-        guard isRunning else { return }
         isRunning = false
         captureTask?.cancel()
         captureTask = nil
@@ -87,19 +103,21 @@ final class SelectionMonitor {
             RemoveEventHandler(hotKeyHandlerRef)
             self.hotKeyHandlerRef = nil
         }
+        Self.logger.notice("Selection monitor stopped")
     }
 
     func updateShortcut(_ shortcut: GlobalShortcutConfiguration) {
         self.shortcut = shortcut
         guard isRunning else { return }
         unregisterHotKey()
-        registerHotKey()
+        _ = registerHotKey()
     }
 
     func captureNow() {
         scheduleCapture(
             after: .zero,
             allowsDuplicate: true,
+            trigger: .manual,
             requiresRunning: false
         )
     }
@@ -108,17 +126,18 @@ final class SelectionMonitor {
         guard isRunning else { return }
         scheduleCapture(
             after: .milliseconds(20),
-            allowsDuplicate: true
+            allowsDuplicate: true,
+            trigger: .hotKey
         )
     }
 
-    private func installHotKeyHandlerIfNeeded() {
-        guard hotKeyHandlerRef == nil else { return }
+    private func installHotKeyHandlerIfNeeded() -> OSStatus {
+        guard hotKeyHandlerRef == nil else { return noErr }
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
             eventKind: UInt32(kEventHotKeyPressed)
         )
-        InstallEventHandler(
+        return InstallEventHandler(
             GetApplicationEventTarget(),
             clipAllHotKeyHandler,
             1,
@@ -128,8 +147,8 @@ final class SelectionMonitor {
         )
     }
 
-    private func registerHotKey() {
-        guard hotKeyRef == nil else { return }
+    private func registerHotKey() -> OSStatus {
+        guard hotKeyRef == nil else { return noErr }
         var reference: EventHotKeyRef?
         let identifier = EventHotKeyID(
             signature: clipAllHotKeySignature,
@@ -146,6 +165,7 @@ final class SelectionMonitor {
         if status == noErr {
             hotKeyRef = reference
         }
+        return status
     }
 
     private func unregisterHotKey() {
@@ -167,6 +187,7 @@ final class SelectionMonitor {
     private func scheduleCapture(
         after delay: Duration,
         allowsDuplicate: Bool,
+        trigger: CaptureTrigger,
         requiresRunning: Bool = true
     ) {
         guard isRunning || !requiresRunning else { return }
@@ -183,14 +204,23 @@ final class SelectionMonitor {
                 )
                 guard !Task.isCancelled, self.isRunning || !requiresRunning else { return }
                 guard allowsDuplicate || shouldPublish(context) else { return }
+                Self.logger.debug(
+                    "Selection captured: trigger=\(trigger.rawValue, privacy: .public), hasBounds=\(context.selectionBounds != nil, privacy: .public)"
+                )
                 onSelection(context)
             } catch let error as SelectionCaptureError {
+                Self.logger.debug(
+                    "Selection capture ended: trigger=\(trigger.rawValue, privacy: .public), error=\(String(describing: error), privacy: .public)"
+                )
                 if error == .permissionRequired {
                     onPermissionRequired()
                 } else {
                     onSelectionInvalidated()
                 }
             } catch {
+                Self.logger.error(
+                    "Selection capture failed: trigger=\(trigger.rawValue, privacy: .public), errorType=\(String(describing: type(of: error)), privacy: .public)"
+                )
                 onSelectionInvalidated()
             }
         }
