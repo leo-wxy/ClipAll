@@ -1,0 +1,7 @@
+{"file":".trellis/spec/backend/index.md","reason":"执行 backend 质量检查入口"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"复核敏感子进程 I/O、匿名管道和回归要求"}
+{"file":".trellis/spec/backend/local-build-and-release.md","reason":"使用项目规定的构建与全量验证命令"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核 client transport 与 Runner 协议边界"}
+{"file":".trellis/tasks/08-10-runner-memory-transport/research/process-pipe-design.md","reason":"检查死锁、内存上限、EOF、取消与 timeout 风险"}
+{"file":".trellis/tasks/08-10-runner-memory-transport/research/runner-regression-matrix.md","reason":"逐项核对现有与新增回归覆盖"}
+{"file":".trellis/tasks/08-10-runner-memory-transport/research/privacy-contract-impact.md","reason":"确认无落盘承诺及 out-of-scope 边界未漂移"}

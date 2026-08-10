@@ -4,7 +4,7 @@ import SwiftUI
 enum ClipAllTheme {
     static let accent = Color(nsColor: accentColor)
     static let canvas = Color(nsColor: .windowBackgroundColor)
-    static let sidebar = Color(nsColor: .underPageBackgroundColor)
+    static let sidebar = Color(nsColor: .windowBackgroundColor)
     static let surface = Color(nsColor: .controlBackgroundColor)
     static let elevatedSurface = Color(nsColor: .textBackgroundColor)
     static let separator = Color(nsColor: .separatorColor)

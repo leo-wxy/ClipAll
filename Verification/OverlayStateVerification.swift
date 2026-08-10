@@ -38,26 +38,37 @@ enum OverlayStateVerification {
         try expect(above.origin == CGPoint(x: 510, y: 48), "下方空间不足时应显示在选区上方")
 
         let expandedBelow = OverlayPlacement.resizedFrame(
-            from: below,
+            anchoredTopLeft: CGPoint(x: below.minX, y: below.maxY),
             panelSize: CGSize(width: 200, height: 240),
-            visibleFrame: visible,
-            attachmentEdge: OverlayPlacement.attachmentEdge(
-                for: below,
-                anchor: CGRect(x: 600, y: 400, width: 20, height: 20)
-            )
+            visibleFrame: visible
         )
         try expect(expandedBelow.maxY == below.maxY, "选区下方的浮层展开时应保持上边缘不动")
 
-        let expandedAbove = OverlayPlacement.resizedFrame(
-            from: above,
-            panelSize: CGSize(width: 200, height: 240),
-            visibleFrame: visible,
-            attachmentEdge: OverlayPlacement.attachmentEdge(
-                for: above,
-                anchor: CGRect(x: 600, y: 20, width: 20, height: 20)
-            )
+        let collapsedBelow = OverlayPlacement.resizedFrame(
+            anchoredTopLeft: CGPoint(x: below.minX, y: below.maxY),
+            panelSize: CGSize(width: size.width, height: OverlayPlacement.minimumPanelHeight),
+            visibleFrame: visible
         )
-        try expect(expandedAbove.minY == above.minY, "选区上方的浮层展开时应保持下边缘不动")
+        try expect(collapsedBelow.maxY == below.maxY, "浮层展开后再收缩仍应回到同一上边缘")
+        try expect(
+            collapsedBelow.height == OverlayPlacement.minimumPanelHeight,
+            "收缩高度必须与 36pt 操作栏一致，不能产生垂直居中的 2pt 位移"
+        )
+
+        let expandedAbove = OverlayPlacement.resizedFrame(
+            anchoredTopLeft: CGPoint(x: above.minX, y: above.maxY),
+            panelSize: CGSize(width: 200, height: 240),
+            visibleFrame: visible
+        )
+        try expect(expandedAbove.maxY == above.maxY, "选区上方的浮层展开时也应保持上边缘不动")
+
+        let constrainedAtBottom = OverlayPlacement.resizedFrame(
+            anchoredTopLeft: CGPoint(x: below.minX, y: 100),
+            panelSize: CGSize(width: 200, height: 240),
+            visibleFrame: visible
+        )
+        try expect(constrainedAtBottom.maxY == 100, "屏幕底部空间不足时仍应保持上边缘不动")
+        try expect(constrainedAtBottom.minY == 10, "屏幕底部空间不足时应限制窗口高度而不是越界")
 
         let secondary = CGRect(x: -1_280, y: -120, width: 1_280, height: 800)
         let clamped = OverlayPlacement.calculate(

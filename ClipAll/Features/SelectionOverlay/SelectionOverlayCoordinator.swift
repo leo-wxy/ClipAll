@@ -1,39 +1,40 @@
 import AppKit
 import Combine
-import QuartzCore
 import SwiftUI
 
 @MainActor
 final class SelectionOverlayCoordinator {
     private let store: SelectionOverlayStore
     private let panel: SelectionOverlayPanel
-    private let hostingController: NSHostingController<SelectionOverlayView>
+    private lazy var hostingController = NSHostingController(
+        rootView: SelectionOverlayView(
+            store: store,
+            onToggleMore: { [weak self] in self?.toggleMore() }
+        )
+    )
 
     private var cancellables: Set<AnyCancellable> = []
     private var globalMouseMonitor: Any?
     private var localMouseMonitor: Any?
     private var workspaceActivationObserver: NSObjectProtocol?
-    private var panelResignKeyObserver: NSObjectProtocol?
     private var synchronizationTask: Task<Void, Never>?
     private var positionedContextID: UUID?
-    private var lastPresentedFrame: CGRect?
-    private var attachmentEdge: OverlayAttachmentEdge?
+    private var anchoredTopLeft: CGPoint?
 
     init(store: SelectionOverlayStore) {
         self.store = store
-        hostingController = NSHostingController(rootView: SelectionOverlayView(store: store))
-        hostingController.sizingOptions = []
         panel = SelectionOverlayPanel(
             contentRect: CGRect(
                 x: 0,
                 y: 0,
                 width: SelectionOverlayView.expandedWidth,
-                height: 42
+                height: OverlayPlacement.minimumPanelHeight
             ),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
+        hostingController.sizingOptions = []
         panel.contentViewController = hostingController
         panel.appearance = NSApp.effectiveAppearance
         hostingController.view.wantsLayer = true
@@ -50,7 +51,7 @@ final class SelectionOverlayCoordinator {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.animationBehavior = .none
-        panel.becomesKeyOnlyIfNeeded = false
+        panel.becomesKeyOnlyIfNeeded = true
 
         store.objectWillChange
             .sink { [weak self] _ in
@@ -60,7 +61,6 @@ final class SelectionOverlayCoordinator {
 
         installDismissMonitors()
         installWorkspaceMonitor()
-        installPanelFocusMonitor()
     }
 
     func present(_ context: SelectionContext) {
@@ -73,8 +73,7 @@ final class SelectionOverlayCoordinator {
         synchronizationTask = nil
         store.dismiss()
         positionedContextID = nil
-        lastPresentedFrame = nil
-        attachmentEdge = nil
+        anchoredTopLeft = nil
         if panel.isKeyWindow {
             panel.resignKey()
         }
@@ -100,24 +99,30 @@ final class SelectionOverlayCoordinator {
             ?? NSScreen.screens.first
         guard let screen else { return }
 
-        let fittingSize = hostingController.view.fittingSize
         let availableWidth = max(280, screen.visibleFrame.width - OverlayPlacement.edgeInset * 2)
         let availableHeight = max(80, screen.visibleFrame.height - OverlayPlacement.edgeInset * 2)
-        let size = CGSize(
+        let maximumSize = CGSize(
             width: min(SelectionOverlayView.expandedWidth, availableWidth),
-            height: min(max(40, fittingSize.height), min(360, availableHeight))
+            height: min(360, availableHeight)
+        )
+        let fittingSize = hostingController.sizeThatFits(in: maximumSize)
+        let size = CGSize(
+            width: maximumSize.width,
+            height: min(
+                max(OverlayPlacement.minimumPanelHeight, ceil(fittingSize.height)),
+                maximumSize.height
+            )
         )
         let wasVisible = panel.isVisible
         let keepsCurrentAnchor = wasVisible
             && positionedContextID == context.id
-            && lastPresentedFrame != nil
+            && anchoredTopLeft != nil
         let frame: CGRect
-        if keepsCurrentAnchor, let lastPresentedFrame, let attachmentEdge {
+        if keepsCurrentAnchor, let anchoredTopLeft {
             frame = OverlayPlacement.resizedFrame(
-                from: lastPresentedFrame,
+                anchoredTopLeft: anchoredTopLeft,
                 panelSize: size,
-                visibleFrame: screen.visibleFrame,
-                attachmentEdge: attachmentEdge
+                visibleFrame: screen.visibleFrame
             )
         } else {
             frame = OverlayPlacement.calculate(
@@ -126,7 +131,6 @@ final class SelectionOverlayCoordinator {
                 visibleFrame: screen.visibleFrame
             )
             positionedContextID = context.id
-            attachmentEdge = OverlayPlacement.attachmentEdge(for: frame, anchor: anchor)
         }
         if store.isMorePresented {
             panel.allowsKeyboardInput = true
@@ -136,29 +140,12 @@ final class SelectionOverlayCoordinator {
             }
             panel.allowsKeyboardInput = false
         }
-        if wasVisible {
-            panel.setFrame(frame, display: true, animate: false)
-        } else {
-            let revealWidth = min(frame.width, max(54, frame.width * 0.42))
-            let revealFrame = CGRect(
-                x: frame.midX - revealWidth / 2,
-                y: frame.minY,
-                width: revealWidth,
-                height: frame.height
-            )
-            panel.alphaValue = 0
-            panel.setFrame(revealFrame, display: true, animate: false)
-            panel.orderFrontRegardless()
-            NSAnimationContext.runAnimationGroup { animation in
-                animation.duration = 0.09
-                animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                panel.animator().setFrame(frame, display: true)
-                panel.animator().alphaValue = 1
-            }
+        panel.setFrame(frame, display: true, animate: false)
+        if !keepsCurrentAnchor {
+            anchoredTopLeft = CGPoint(x: panel.frame.minX, y: panel.frame.maxY)
         }
-        lastPresentedFrame = frame
-        if store.isMorePresented {
-            panel.makeKey()
+        if !wasVisible {
+            panel.orderFrontRegardless()
         }
     }
 
@@ -169,6 +156,21 @@ final class SelectionOverlayCoordinator {
             guard !Task.isCancelled else { return }
             self?.synchronizePanel()
         }
+    }
+
+    private func toggleMore() {
+        guard store.isVisible else { return }
+
+        if store.isMorePresented {
+            store.hideMore()
+        } else {
+            store.showMore()
+        }
+
+        synchronizationTask?.cancel()
+        synchronizationTask = nil
+        synchronizePanel()
+        panel.contentView?.layoutSubtreeIfNeeded()
     }
 
     private func installDismissMonitors() {
@@ -210,18 +212,6 @@ final class SelectionOverlayCoordinator {
         }
     }
 
-    private func installPanelFocusMonitor() {
-        panelResignKeyObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didResignKeyNotification,
-            object: panel,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self, self.store.isMorePresented else { return }
-                self.dismiss()
-            }
-        }
-    }
 }
 
 private final class SelectionOverlayPanel: NSPanel {

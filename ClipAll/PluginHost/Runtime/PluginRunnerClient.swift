@@ -68,35 +68,21 @@ struct PluginRunnerClient: Sendable {
             throw PluginRunnerClientError.requestTooLarge
         }
 
-        let temporaryDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ClipAllPluginRunner-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(
-            at: temporaryDirectory,
-            withIntermediateDirectories: true
-        )
-        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
-
-        let stdinURL = temporaryDirectory.appendingPathComponent("stdin.json")
-        let stdoutURL = temporaryDirectory.appendingPathComponent("stdout.json")
-        let stderrURL = temporaryDirectory.appendingPathComponent("stderr.log")
-        try requestData.write(to: stdinURL, options: .atomic)
-        FileManager.default.createFile(atPath: stdoutURL.path, contents: nil)
-        FileManager.default.createFile(atPath: stderrURL.path, contents: nil)
-
-        let stdin = try FileHandle(forReadingFrom: stdinURL)
-        let stdout = try FileHandle(forWritingTo: stdoutURL)
-        let stderr = try FileHandle(forWritingTo: stderrURL)
-        defer {
-            try? stdin.close()
-            try? stdout.close()
-            try? stderr.close()
-        }
-
+        let stdin = Pipe()
+        let stdout = Pipe()
+        let stderr = Pipe()
         let process = Process()
         process.executableURL = runnerURL
         process.standardInput = stdin
         process.standardOutput = stdout
         process.standardError = stderr
+        let processIO = PluginProcessIO(
+            stdin: stdin.fileHandleForWriting,
+            stdout: stdout.fileHandleForReading,
+            stderr: stderr.fileHandleForReading,
+            responseLimit: PluginRuntimeLimits.maximumResponseBytes
+        )
+        defer { processIO.finish() }
 
         let termination = DispatchSemaphore(value: 0)
         process.terminationHandler = { _ in termination.signal() }
@@ -106,8 +92,11 @@ struct PluginRunnerClient: Sendable {
         do {
             try process.run()
         } catch {
+            closeUnusedPipeEnds(stdin: stdin, stdout: stdout, stderr: stderr)
             throw PluginRunnerClientError.launchFailed
         }
+        closeUnusedPipeEnds(stdin: stdin, stdout: stdout, stderr: stderr)
+        processIO.start(requestData: requestData)
         guard cancellation.attach(process) else {
             terminate(process)
             throw CancellationError()
@@ -121,6 +110,7 @@ struct PluginRunnerClient: Sendable {
             _ = termination.wait(timeout: .now() + 0.15)
             throw PluginRunnerClientError.timedOut
         }
+        processIO.finish()
         if cancellation.isCancelled {
             throw CancellationError()
         }
@@ -128,9 +118,8 @@ struct PluginRunnerClient: Sendable {
             throw PluginRunnerClientError.invalidResponse
         }
 
-        try stdout.synchronize()
-        let responseData = try Data(contentsOf: stdoutURL, options: .mappedIfSafe)
-        guard responseData.count <= PluginRuntimeLimits.maximumResponseBytes else {
+        let responseData = processIO.responseData
+        guard !processIO.responseExceededLimit else {
             throw PluginRunnerClientError.responseTooLarge
         }
         guard !responseData.isEmpty,
@@ -141,6 +130,12 @@ struct PluginRunnerClient: Sendable {
         }
 
         return PluginRunnerExecution(response: response, duration: startedAt.duration(to: clock.now))
+    }
+
+    private func closeUnusedPipeEnds(stdin: Pipe, stdout: Pipe, stderr: Pipe) {
+        try? stdin.fileHandleForReading.close()
+        try? stdout.fileHandleForWriting.close()
+        try? stderr.fileHandleForWriting.close()
     }
 
     private func terminate(_ process: Process) {
@@ -157,6 +152,214 @@ struct PluginRunnerClient: Sendable {
             response.output != nil && response.error == nil
         case .failure:
             response.output == nil && response.error != nil
+        }
+    }
+}
+
+private final class PluginProcessIO: @unchecked Sendable {
+    private static let chunkSize = 32_768
+    private static let pollIntervalMilliseconds: Int32 = 20
+    private static let completionWindow = 0.15
+
+    private let stdin: FileHandle
+    private let stdout: FileHandle
+    private let stderr: FileHandle
+    private let state: PluginProcessIOState
+    private let workers = DispatchGroup()
+    private let queue = DispatchQueue(
+        label: "com.wxy.ClipAll.plugin-runner-io",
+        qos: .userInitiated,
+        attributes: .concurrent
+    )
+    private var finished = false
+
+    init(stdin: FileHandle, stdout: FileHandle, stderr: FileHandle, responseLimit: Int) {
+        self.stdin = stdin
+        self.stdout = stdout
+        self.stderr = stderr
+        state = PluginProcessIOState(responseLimit: responseLimit)
+        makeNonBlocking(stdin.fileDescriptor, suppressesSIGPIPE: true)
+        makeNonBlocking(stdout.fileDescriptor)
+        makeNonBlocking(stderr.fileDescriptor)
+    }
+
+    var responseData: Data { state.responseData }
+    var responseExceededLimit: Bool { state.responseExceededLimit }
+
+    func start(requestData: Data) {
+        workers.enter()
+        queue.async { [self] in
+            defer {
+                try? stdin.close()
+                workers.leave()
+            }
+            write(requestData, to: stdin.fileDescriptor)
+        }
+
+        workers.enter()
+        queue.async { [self] in
+            defer {
+                try? stdout.close()
+                workers.leave()
+            }
+            drain(stdout.fileDescriptor, collectsResponse: true)
+        }
+
+        workers.enter()
+        queue.async { [self] in
+            defer {
+                try? stderr.close()
+                workers.leave()
+            }
+            drain(stderr.fileDescriptor, collectsResponse: false)
+        }
+    }
+
+    func finish() {
+        guard !finished else { return }
+        finished = true
+
+        if workers.wait(timeout: .now() + Self.completionWindow) == .timedOut {
+            state.requestStop()
+            closeHandles()
+            _ = workers.wait(timeout: .now() + Self.completionWindow)
+        } else {
+            closeHandles()
+        }
+    }
+
+    private func write(_ data: Data, to descriptor: Int32) {
+        data.withUnsafeBytes { bytes in
+            guard let baseAddress = bytes.baseAddress else { return }
+            var offset = 0
+
+            while offset < bytes.count, !state.shouldStop {
+                var event = pollfd(fd: descriptor, events: Int16(POLLOUT), revents: 0)
+                let result = Darwin.poll(&event, 1, Self.pollIntervalMilliseconds)
+                if result == 0 { continue }
+                if result < 0 {
+                    if errno == EINTR { continue }
+                    return
+                }
+                if event.revents & Int16(POLLERR | POLLHUP | POLLNVAL) != 0 {
+                    return
+                }
+                guard event.revents & Int16(POLLOUT) != 0 else { continue }
+
+                let written = Darwin.write(
+                    descriptor,
+                    baseAddress.advanced(by: offset),
+                    bytes.count - offset
+                )
+                if written > 0 {
+                    offset += written
+                } else if written < 0, errno != EINTR, errno != EAGAIN, errno != EWOULDBLOCK {
+                    return
+                }
+            }
+        }
+    }
+
+    private func drain(_ descriptor: Int32, collectsResponse: Bool) {
+        var buffer = [UInt8](repeating: 0, count: Self.chunkSize)
+
+        while !state.shouldStop {
+            var event = pollfd(
+                fd: descriptor,
+                events: Int16(POLLIN | POLLHUP | POLLERR),
+                revents: 0
+            )
+            let result = Darwin.poll(&event, 1, Self.pollIntervalMilliseconds)
+            if result == 0 { continue }
+            if result < 0 {
+                if errno == EINTR { continue }
+                return
+            }
+            if event.revents & Int16(POLLNVAL) != 0 { return }
+
+            if event.revents & Int16(POLLIN | POLLHUP) != 0 {
+                while true {
+                    let count = buffer.withUnsafeMutableBytes { bytes in
+                        Darwin.read(descriptor, bytes.baseAddress, bytes.count)
+                    }
+                    if count > 0 {
+                        if collectsResponse {
+                            state.appendResponse(buffer, count: count)
+                        }
+                    } else if count == 0 {
+                        return
+                    } else if errno == EINTR {
+                        continue
+                    } else if errno == EAGAIN || errno == EWOULDBLOCK {
+                        break
+                    } else {
+                        return
+                    }
+                }
+            }
+            if event.revents & Int16(POLLERR) != 0 { return }
+        }
+    }
+
+    private func makeNonBlocking(_ descriptor: Int32, suppressesSIGPIPE: Bool = false) {
+        let flags = fcntl(descriptor, F_GETFL)
+        if flags >= 0 {
+            _ = fcntl(descriptor, F_SETFL, flags | O_NONBLOCK)
+        }
+        if suppressesSIGPIPE {
+            _ = fcntl(descriptor, F_SETNOSIGPIPE, 1)
+        }
+    }
+
+    private func closeHandles() {
+        try? stdin.close()
+        try? stdout.close()
+        try? stderr.close()
+    }
+}
+
+private final class PluginProcessIOState: @unchecked Sendable {
+    private let lock = NSLock()
+    private let responseCapacity: Int
+    private var response = Data()
+    private var stopped = false
+
+    init(responseLimit: Int) {
+        responseCapacity = responseLimit + 1
+    }
+
+    var shouldStop: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return stopped
+    }
+
+    var responseData: Data {
+        lock.lock()
+        defer { lock.unlock() }
+        return response
+    }
+
+    var responseExceededLimit: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return response.count == responseCapacity
+    }
+
+    func requestStop() {
+        lock.lock()
+        stopped = true
+        lock.unlock()
+    }
+
+    func appendResponse(_ buffer: [UInt8], count: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        let appendCount = min(count, responseCapacity - response.count)
+        guard appendCount > 0 else { return }
+        buffer.withUnsafeBytes { bytes in
+            guard let baseAddress = bytes.bindMemory(to: UInt8.self).baseAddress else { return }
+            response.append(baseAddress, count: appendCount)
         }
     }
 }

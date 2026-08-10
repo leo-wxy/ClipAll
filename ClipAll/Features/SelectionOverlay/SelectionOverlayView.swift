@@ -7,8 +7,8 @@ struct SelectionOverlayView: View {
     static let expandedWidth: CGFloat = 324
 
     @ObservedObject var store: SelectionOverlayStore
+    let onToggleMore: () -> Void
     @Environment(\.colorScheme) private var colorScheme
-    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -38,11 +38,6 @@ struct SelectionOverlayView: View {
         .overlay {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .stroke(overlayBorder, lineWidth: 0.75)
-        }
-        .onChange(of: store.isMorePresented) { _, presented in
-            if presented {
-                Task { @MainActor in isSearchFocused = true }
-            }
         }
         .onExitCommand {
             if store.isMorePresented {
@@ -84,9 +79,7 @@ struct SelectionOverlayView: View {
                 .frame(width: 1, height: 18)
                 .padding(.horizontal, 3)
 
-            Button {
-                store.isMorePresented ? store.hideMore() : store.showMore()
-            } label: {
+            Button(action: onToggleMore) {
                 Image(systemName: "plus")
                     .font(.system(size: 12, weight: .medium))
                     .rotationEffect(.degrees(store.isMorePresented ? 45 : 0))
@@ -180,7 +173,6 @@ struct SelectionOverlayView: View {
                     .foregroundStyle(.secondary)
                 TextField("搜索插件", text: $store.moreQuery)
                     .textFieldStyle(.plain)
-                    .focused($isSearchFocused)
                     .onSubmit {
                         if let first = store.morePluginSections.matches.first {
                             store.execute(first)
@@ -209,9 +201,22 @@ struct SelectionOverlayView: View {
                     }
                 }
             }
-            .frame(maxHeight: 176)
+            .frame(idealHeight: moreListHeight, maxHeight: moreListHeight)
         }
         .padding(8)
+    }
+
+    private var moreListHeight: CGFloat {
+        let sections = store.morePluginSections
+        let itemCount = sections.matches.count + sections.recent.count
+        guard itemCount > 0 else { return 57 }
+
+        let sectionCount = (sections.matches.isEmpty || !store.moreQuery.isEmpty ? 0 : 1)
+            + (sections.recent.isEmpty ? 0 : 1)
+        let elementCount = itemCount + sectionCount
+        let contentHeight = CGFloat(itemCount * 36 + sectionCount * 18)
+            + CGFloat(max(0, elementCount - 1) * 3)
+        return min(contentHeight, 176)
     }
 
     @ViewBuilder
@@ -253,6 +258,18 @@ struct SelectionOverlayView: View {
     }
 
     private func resultPanel(_ result: CapabilityResult) -> some View {
+        ViewThatFits(in: .vertical) {
+            resultContent(result)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ScrollView {
+                resultContent(result)
+            }
+        }
+        .frame(maxHeight: 240)
+    }
+
+    private func resultContent(_ result: CapabilityResult) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(result.title)
@@ -294,7 +311,6 @@ struct SelectionOverlayView: View {
             }
         }
         .padding(9)
-        .frame(maxHeight: 240)
     }
 
     private func actionButton(

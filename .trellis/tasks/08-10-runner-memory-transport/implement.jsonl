@@ -1,0 +1,7 @@
+{"file":".trellis/spec/backend/index.md","reason":"确认 backend 规范状态与相关质量入口"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"执行敏感子进程 I/O、匿名管道和有界采集合同"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"约束宿主、Process 标准流与 Runner JSON 边界的一致性"}
+{"file":".trellis/tasks/08-10-runner-memory-transport/research/process-pipe-design.md","reason":"提供 Pipe 背压、EOF、超时、取消和有界采集设计"}
+{"file":".trellis/tasks/08-10-runner-memory-transport/research/runner-regression-matrix.md","reason":"提供现有错误矩阵与必须新增的 Pipe 回归"}
+{"file":".trellis/tasks/08-10-runner-memory-transport/research/privacy-contract-impact.md","reason":"限定隐私契约、调用影响面与协议兼容范围"}
+{"file":".trellis/tasks/08-10-runner-memory-transport/research/author-intent.md","reason":"记录无作者历史证据及仅可依赖的客观约束"}

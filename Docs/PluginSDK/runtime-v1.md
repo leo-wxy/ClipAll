@@ -62,7 +62,7 @@ code 使用小写 snake_case，message 面向用户且不包含输入正文。�
 
 ## 进程协议
 
-宿主与 runner 使用 stdin/stdout 交换单个 JSON request/response，顶层包含 `protocolVersion: 1`。脚本文本由宿主读取并传入 runner；runner 不接收安装目录路径。Runner 负责验证结构化结果的字段、数量和字符串限制；宿主再次检查响应大小、协议版本，以及 status 与 output/error 的一致性。
+宿主与 runner 使用匿名内存管道，通过 stdin/stdout 交换单个 JSON request/response，传输过程不创建临时文件，顶层包含 `protocolVersion: 1`。脚本文本由宿主读取并传入 runner；runner 不接收安装目录路径。Runner 负责验证结构化结果的字段、数量和字符串限制；宿主再次检查响应大小、协议版本，以及 status 与 output/error 的一致性。stderr 只由宿主排空以避免阻塞，不属于运行协议，也不会作为调试日志暴露。
 
 每次能力执行创建新 runner 和 JavaScript context。默认执行期限 750 ms；超时、取消、非零退出、stdout 污染、无效 JSON 或超限响应都会成为当前插件执行错误，不影响主 App。选中文字的 UTF-8 输入上限为 65,536 bytes。
 
