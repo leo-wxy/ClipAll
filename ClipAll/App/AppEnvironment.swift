@@ -88,7 +88,11 @@ final class AppEnvironment: ObservableObject {
             openAITranslation: openAITranslation
         )
         let overlayCoordinator = SelectionOverlayCoordinator(store: overlayStore)
-        let selectionCapture = SelectionCaptureService()
+        let selectionCapture = SelectionCaptureService(
+            isFallbackAllowed: { bundleIdentifier in
+                settings.allowsSelectionFallback(for: bundleIdentifier)
+            }
+        )
         let selectionMonitor = SelectionMonitor(
             captureService: selectionCapture,
             shortcut: settings.globalShortcut,

@@ -19,9 +19,13 @@ struct PointerSelectionGesture: Sendable {
         }
     }
 
-    mutating func end(at location: CGPoint, clickCount: Int) -> Bool {
+    mutating func end(
+        at location: CGPoint,
+        clickCount: Int,
+        isShiftPressed: Bool = false
+    ) -> Bool {
         update(at: location)
-        let shouldCapture = exceededDragThreshold || clickCount >= 2
+        let shouldCapture = exceededDragThreshold || clickCount >= 2 || isShiftPressed
         reset()
         return shouldCapture
     }

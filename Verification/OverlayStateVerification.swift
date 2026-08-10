@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 private enum OverlayStateVerificationError: Error, CustomStringConvertible {
@@ -13,11 +14,203 @@ private enum OverlayStateVerificationError: Error, CustomStringConvertible {
 @main
 @MainActor
 enum OverlayStateVerification {
-    static func main() throws {
+    static func main() async throws {
         try verifyPlacement()
         try verifyPointerSelectionGesture()
         try verifyEmptyPinnedPersistence()
+        try await verifyClipboardSelectionFallback()
         print("Overlay state verification passed")
+    }
+
+    private static func verifyClipboardSelectionFallback() async throws {
+        try await verifyClipboardScenario("多格式恢复", verifyClipboardFallbackRestoresAllTypes)
+        try await verifyClipboardScenario("相同文本", verifyClipboardFallbackDetectsSameTextCopy)
+        try await verifyClipboardScenario("超时恢复", verifyClipboardFallbackRestoresAfterTimeout)
+        try await verifyClipboardScenario("并发写入", verifyClipboardFallbackPreservesExternalChange)
+        try await verifyClipboardScenario("取消恢复", verifyClipboardFallbackRestoresAfterCancellation)
+        try await verifyClipboardScenario("不安全快照", verifyClipboardFallbackRejectsUnsafeSnapshot)
+    }
+
+    private static func verifyClipboardScenario(
+        _ name: String,
+        _ verification: () async throws -> Void
+    ) async throws {
+        do {
+            try await verification()
+        } catch let error as OverlayStateVerificationError {
+            throw error
+        } catch {
+            throw OverlayStateVerificationError.failed("剪贴板场景“\(name)”失败：\(error)")
+        }
+    }
+
+    private static func verifyClipboardFallbackRestoresAllTypes() async throws {
+        let pasteboard = VerificationPasteboard()
+        defer { pasteboard.clearContents() }
+        let rtf = Data("{\\rtf1 original}".utf8)
+        writePasteboard(pasteboard, text: "original", rtf: rtf)
+
+        let fallback = makeFallback(pasteboard: pasteboard) { _ in
+            writePasteboard(pasteboard, text: "selected")
+            return true
+        }
+        let text = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+
+        try expect(text == "selected", "复制回退应读取目标选区")
+        try expect(pasteboard.string(forType: .string) == "original", "复制回退后应恢复原文字")
+        try expect(pasteboard.data(forType: .rtf) == rtf, "复制回退后应恢复原富文本")
+    }
+
+    private static func verifyClipboardFallbackDetectsSameTextCopy() async throws {
+        let pasteboard = VerificationPasteboard()
+        defer { pasteboard.clearContents() }
+        writePasteboard(pasteboard, text: "same")
+
+        let fallback = makeFallback(pasteboard: pasteboard) { _ in
+            writePasteboard(pasteboard, text: "same")
+            return true
+        }
+        let text = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+
+        try expect(text == "same", "复制内容与原剪贴板相同时仍应依靠 changeCount 识别")
+        try expect(pasteboard.string(forType: .string) == "same", "相同文字回退后仍应恢复剪贴板")
+    }
+
+    private static func verifyClipboardFallbackRestoresAfterTimeout() async throws {
+        let pasteboard = VerificationPasteboard()
+        defer { pasteboard.clearContents() }
+        writePasteboard(pasteboard, text: "original")
+
+        let fallback = makeFallback(
+            pasteboard: pasteboard,
+            timeout: .milliseconds(25)
+        ) { _ in true }
+        do {
+            _ = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+            throw OverlayStateVerificationError.failed("复制无响应时应超时")
+        } catch ClipboardSelectionFallbackError.timedOut {
+            try expect(
+                pasteboard.string(forType: .string) == "original",
+                "复制超时后应恢复剪贴板"
+            )
+        }
+    }
+
+    private static func verifyClipboardFallbackPreservesExternalChange() async throws {
+        let pasteboard = VerificationPasteboard()
+        defer { pasteboard.clearContents() }
+        writePasteboard(pasteboard, text: "original")
+
+        let fallback = makeFallback(
+            pasteboard: pasteboard,
+            stabilityDelay: .milliseconds(30)
+        ) { _ in
+            writePasteboard(pasteboard, text: "selected")
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(5))
+                writePasteboard(pasteboard, text: "external")
+            }
+            return true
+        }
+        do {
+            _ = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+            throw OverlayStateVerificationError.failed("并发剪贴板变化应中止回退")
+        } catch ClipboardSelectionFallbackError.clipboardChanged {
+            try expect(
+                pasteboard.string(forType: .string) == "external",
+                "并发写入后不得覆盖用户的新剪贴板"
+            )
+        }
+    }
+
+    private static func verifyClipboardFallbackRestoresAfterCancellation() async throws {
+        let pasteboard = VerificationPasteboard()
+        defer { pasteboard.clearContents() }
+        writePasteboard(pasteboard, text: "original")
+
+        let fallback = makeFallback(
+            pasteboard: pasteboard,
+            timeout: .seconds(1)
+        ) { _ in true }
+        let task = Task { @MainActor in
+            try await fallback.captureSelection(sourceProcessIdentifier: 42)
+        }
+        try await Task.sleep(for: .milliseconds(10))
+        task.cancel()
+        do {
+            _ = try await task.value
+            throw OverlayStateVerificationError.failed("取消时应停止复制回退")
+        } catch is CancellationError {
+            try expect(
+                pasteboard.string(forType: .string) == "original",
+                "取消复制回退后应恢复剪贴板"
+            )
+        }
+    }
+
+    private static func verifyClipboardFallbackRejectsUnsafeSnapshot() async throws {
+        let pasteboard = VerificationPasteboard()
+        defer { pasteboard.clearContents() }
+        let items = (0..<17).map { index in
+            let item = NSPasteboardItem()
+            item.setString("item-\(index)", forType: .string)
+            return item
+        }
+        pasteboard.clearContents()
+        _ = pasteboard.writeObjects(items)
+        let originalChangeCount = pasteboard.changeCount
+
+        let fallback = makeFallback(pasteboard: pasteboard) { _ in
+            throwIfReached("快照失败后不得发送复制")
+        }
+        do {
+            _ = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+            throw OverlayStateVerificationError.failed("超出上限的剪贴板应拒绝回退")
+        } catch ClipboardSelectionFallbackError.unsafePasteboard {
+            try expect(
+                pasteboard.changeCount == originalChangeCount,
+                "无法安全快照时不得先清空剪贴板"
+            )
+            try expect(
+                pasteboard.string(forType: .string) == "item-0",
+                "无法安全快照时应保留原内容"
+            )
+        }
+    }
+
+    private static func throwIfReached(_ message: String) -> Bool {
+        assertionFailure(message)
+        return false
+    }
+
+    private static func makeFallback(
+        pasteboard: VerificationPasteboard,
+        timeout: Duration = .milliseconds(100),
+        stabilityDelay: Duration = .milliseconds(1),
+        sendCopy: @escaping ClipboardSelectionFallback.CopyAction
+    ) -> ClipboardSelectionFallback {
+        ClipboardSelectionFallback(
+            pasteboard: pasteboard,
+            timeout: timeout,
+            pollInterval: .milliseconds(1),
+            stabilityDelay: stabilityDelay,
+            sendCopy: sendCopy,
+            isSourceFrontmost: { _ in true }
+        )
+    }
+
+    private static func writePasteboard(
+        _ pasteboard: VerificationPasteboard,
+        text: String,
+        rtf: Data? = nil
+    ) {
+        let item = NSPasteboardItem()
+        item.setString(text, forType: .string)
+        if let rtf {
+            item.setData(rtf, forType: .rtf)
+        }
+        pasteboard.clearContents()
+        _ = pasteboard.writeObjects([item])
     }
 
     private static func verifyPointerSelectionGesture() throws {
@@ -40,6 +233,12 @@ enum OverlayStateVerification {
         try expect(
             gesture.end(at: .zero, clickCount: 2),
             "双击选词应触发取词"
+        )
+
+        gesture.begin(at: .zero)
+        try expect(
+            gesture.end(at: .zero, clickCount: 1, isShiftPressed: true),
+            "Shift-click 扩展选区应触发取词"
         )
 
         gesture.begin(at: .zero)
@@ -131,9 +330,48 @@ enum OverlayStateVerification {
 
         let reloaded = SettingsStore(defaults: defaults)
         try expect(reloaded.pinnedCapabilityIDs.isEmpty, "空固定列表重启后不应恢复默认值")
+        try expect(reloaded.isSelectionFallbackEnabled, "兼容取词首次启动应默认开启")
+
+        reloaded.isSelectionFallbackEnabled = false
+        reloaded.setSelectionFallbackExcluded("com.example.Editor", isExcluded: true)
+        let fallbackReloaded = SettingsStore(defaults: defaults)
+        try expect(!fallbackReloaded.isSelectionFallbackEnabled, "兼容取词开关应持久化")
+        try expect(
+            !fallbackReloaded.allowsSelectionFallback(for: "com.example.Editor"),
+            "排除应用不应进入复制回退"
+        )
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {
         guard condition() else { throw OverlayStateVerificationError.failed(message) }
+    }
+}
+
+@MainActor
+private final class VerificationPasteboard: ClipboardPasteboard {
+    private(set) var changeCount = 0
+    private(set) var pasteboardItems: [NSPasteboardItem]? = []
+
+    @discardableResult
+    func clearContents() -> Int {
+        pasteboardItems = []
+        changeCount += 1
+        return changeCount
+    }
+
+    func string(forType dataType: NSPasteboard.PasteboardType) -> String? {
+        pasteboardItems?.lazy.compactMap { $0.string(forType: dataType) }.first
+    }
+
+    func data(forType dataType: NSPasteboard.PasteboardType) -> Data? {
+        pasteboardItems?.lazy.compactMap { $0.data(forType: dataType) }.first
+    }
+
+    func writeObjects(_ objects: [NSPasteboardWriting]) -> Bool {
+        let items = objects.compactMap { $0 as? NSPasteboardItem }
+        guard items.count == objects.count else { return false }
+        pasteboardItems = items
+        changeCount += 1
+        return true
     }
 }

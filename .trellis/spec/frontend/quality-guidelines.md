@@ -56,22 +56,29 @@
 - `PointerSelectionGesture.begin(at:)` starts one pointer gesture.
 - `PointerSelectionGesture.update(at:)` records whether movement reaches the
   four-point drag threshold.
-- `PointerSelectionGesture.end(at:clickCount:) -> Bool` returns whether the
-  gesture is an explicit selection action and always resets its state.
-- `SelectionCapturing.captureCurrentSelection(triggerLocation:)` is the single
-  capture entry used by pointer, registered hotkey, and menu commands.
+- `PointerSelectionGesture.end(at:clickCount:isShiftPressed:) -> Bool` returns
+  whether the gesture is an explicit selection action and always resets state.
+- The async `SelectionCapturing.captureCurrentSelection(triggerLocation:)` is
+  the single capture entry used by pointer, registered hotkey, and menu commands.
 
 ### 3. Contracts
 
-- Pointer auto-capture runs only after a drag at least four points or a mouse-up
-  with `clickCount >= 2`. A plain click never reads a retained old selection.
+- Pointer auto-capture runs only after a drag at least four points, a mouse-up
+  with `clickCount >= 2`, or Shift-click. A plain click never reads a retained
+  old selection.
 - Keyboard selection is explicit: the Carbon-registered global shortcut may
   capture, but ordinary `NSEvent.keyDown` must never be monitored or replayed.
 - Resolve AX candidates in this order: system-wide focus, frontmost application
   focus, then element-at-pointer. For each candidate, inspect a bounded ancestor
   chain for standard selected text/range and Text Marker selection.
-- Secure text fields fail closed. Selected text is never written to diagnostics;
-  logs may contain only trigger type, AX role, error type, and bounds presence.
+- If AX fails after an explicit capture action, compatibility capture may send
+  one targeted `⌘C` only when enabled and the source bundle is not excluded.
+- Clipboard fallback snapshots all readable pasteboard items before clearing,
+  waits asynchronously for a new change count, and restores only while it still
+  owns the current generation. A later external write must never be overwritten.
+- Secure text fields fail with `secureInput` and never enter clipboard fallback.
+  Selected text is never written to diagnostics; logs may contain only trigger
+  type, AX role, error type, and bounds presence.
 
 ### 4. Validation & Error Matrix
 
@@ -81,10 +88,14 @@
 | Drag below four points | No capture |
 | Drag at least four points | Capture after the short selection-settle delay |
 | Double/triple click | Capture after mouse-up |
+| Shift-click | Capture after mouse-up |
 | Registered hotkey | Capture without pointer-gesture state |
 | Missing system-wide focus | Try frontmost-app focus, then pointer hit-test |
 | Text Marker selection only | Resolve text locally; bounds may fall back to pointer |
-| Secure field | Return `unsupported` and never expose text |
+| AX unsupported, fallback enabled | Temporarily copy, restore, and publish a new context |
+| Fallback timeout/cancel | Restore the owned clipboard generation; publish nothing |
+| Clipboard changed externally | Preserve the external content; publish nothing |
+| Secure field | Return `secureInput`; never copy or expose text |
 | No supported selection | Quietly invalidate/dismiss; never reuse old context |
 
 ### 5. Good / Base / Bad Cases
@@ -98,8 +109,9 @@
 
 ### 6. Tests Required
 
-- `Scripts/verify-overlay-state.sh` asserts single-click rejection, drag
-  threshold behavior, double-click acceptance, and sub-threshold movement.
+- `Scripts/verify-overlay-state.sh` asserts explicit gesture rules, fallback
+  success, equal-text detection, multi-type restore, timeout, cancellation,
+  concurrent clipboard changes, and fail-before-clear snapshot limits.
 - `swift build --target ClipAll` verifies AppKit/Carbon integration compiles.
 - Manual QA must use `/Applications/ClipAll.app`: test TextEdit drag, double
   click, retained-highlight single click, normal typing, registered shortcut,

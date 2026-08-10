@@ -75,6 +75,7 @@ final class SelectionMonitor {
             ) { [weak self] event in
                 let location = NSEvent.mouseLocation
                 let clickCount = event.clickCount
+                let isShiftPressed = event.modifierFlags.contains(.shift)
                 switch event.type {
                 case .leftMouseDown:
                     Task { @MainActor [weak self] in
@@ -86,7 +87,11 @@ final class SelectionMonitor {
                     }
                 case .leftMouseUp:
                     Task { @MainActor [weak self] in
-                        self?.handlePointerUp(at: location, clickCount: clickCount)
+                        self?.handlePointerUp(
+                            at: location,
+                            clickCount: clickCount,
+                            isShiftPressed: isShiftPressed
+                        )
                     }
                 default:
                     break
@@ -146,9 +151,17 @@ final class SelectionMonitor {
         )
     }
 
-    private func handlePointerUp(at location: CGPoint, clickCount: Int) {
+    private func handlePointerUp(
+        at location: CGPoint,
+        clickCount: Int,
+        isShiftPressed: Bool
+    ) {
         guard isRunning,
-              pointerGesture.end(at: location, clickCount: clickCount) else { return }
+              pointerGesture.end(
+                  at: location,
+                  clickCount: clickCount,
+                  isShiftPressed: isShiftPressed
+              ) else { return }
         scheduleCapture(
             after: .milliseconds(45),
             allowsDuplicate: false,
@@ -224,7 +237,7 @@ final class SelectionMonitor {
                     try await Task.sleep(for: delay)
                 }
                 try Task.checkCancellation()
-                let context = try captureService.captureCurrentSelection(
+                let context = try await captureService.captureCurrentSelection(
                     triggerLocation: NSEvent.mouseLocation
                 )
                 guard !Task.isCancelled, self.isRunning || !requiresRunning else { return }

@@ -18,6 +18,9 @@ final class SettingsStore: ObservableObject {
 
     private enum Key {
         static let monitoringEnabled = "selectionMonitoringEnabled"
+        static let selectionFallbackEnabled = "selectionFallbackEnabled"
+        static let selectionFallbackExcludedBundleIdentifiers =
+            "selectionFallbackExcludedBundleIdentifiers.v1"
         static let pinnedCapabilityIDs = "pinnedCapabilityIDs"
         static let recentCapabilityIDs = "recentCapabilityIDs"
         static let globalShortcut = "globalShortcut"
@@ -30,6 +33,19 @@ final class SettingsStore: ObservableObject {
 
     @Published var isMonitoringEnabled: Bool {
         didSet { defaults.set(isMonitoringEnabled, forKey: Key.monitoringEnabled) }
+    }
+
+    @Published var isSelectionFallbackEnabled: Bool {
+        didSet { defaults.set(isSelectionFallbackEnabled, forKey: Key.selectionFallbackEnabled) }
+    }
+
+    @Published private(set) var selectionFallbackExcludedBundleIdentifiers: [String] {
+        didSet {
+            defaults.set(
+                selectionFallbackExcludedBundleIdentifiers,
+                forKey: Key.selectionFallbackExcludedBundleIdentifiers
+            )
+        }
     }
 
     @Published private(set) var pinnedCapabilityIDs: [CapabilityID] {
@@ -65,6 +81,15 @@ final class SettingsStore: ObservableObject {
             isMonitoringEnabled = defaults.bool(forKey: Key.monitoringEnabled)
         }
 
+        if defaults.object(forKey: Key.selectionFallbackEnabled) == nil {
+            isSelectionFallbackEnabled = true
+        } else {
+            isSelectionFallbackEnabled = defaults.bool(forKey: Key.selectionFallbackEnabled)
+        }
+        selectionFallbackExcludedBundleIdentifiers = Array(
+            Set(defaults.stringArray(forKey: Key.selectionFallbackExcludedBundleIdentifiers) ?? [])
+        ).sorted()
+
         if defaults.object(forKey: Key.pinnedCapabilityIDs) == nil {
             pinnedCapabilityIDs = [.search, .translate]
         } else {
@@ -92,6 +117,23 @@ final class SettingsStore: ObservableObject {
         pluginEnabledStates = Dictionary(
             uniqueKeysWithValues: storedPluginStates.map { (PluginID($0.key), $0.value) }
         )
+    }
+
+    func setSelectionFallbackExcluded(_ bundleIdentifier: String, isExcluded: Bool) {
+        let normalized = bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return }
+        var updated = Set(selectionFallbackExcludedBundleIdentifiers)
+        if isExcluded {
+            updated.insert(normalized)
+        } else {
+            updated.remove(normalized)
+        }
+        selectionFallbackExcludedBundleIdentifiers = updated.sorted()
+    }
+
+    func allowsSelectionFallback(for bundleIdentifier: String?) -> Bool {
+        guard isSelectionFallbackEnabled, let bundleIdentifier else { return false }
+        return !selectionFallbackExcludedBundleIdentifiers.contains(bundleIdentifier)
     }
 
     @discardableResult

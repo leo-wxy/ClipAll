@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct GeneralSettingsView: View {
     @ObservedObject var settings: SettingsStore
@@ -37,6 +38,48 @@ struct GeneralSettingsView: View {
                             .padding(.vertical, 4)
                             .clipAllInset(cornerRadius: ClipAllTheme.Radius.control)
                         Button("恢复默认") { settings.globalShortcut = .standard }
+                    }
+                }
+
+                ClipAllSectionCard(
+                    "兼容取词",
+                    subtitle: "辅助功能无法读取时，临时模拟复制并恢复原剪贴板。"
+                ) {
+                    VStack(alignment: .leading, spacing: ClipAllTheme.Spacing.sm) {
+                        HStack(alignment: .center, spacing: ClipAllTheme.Spacing.md) {
+                            Label("启用复制回退", systemImage: "doc.on.clipboard")
+                                .fontWeight(.medium)
+                            Spacer()
+                            Toggle("", isOn: $settings.isSelectionFallbackEnabled)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                                .fixedSize()
+                        }
+
+                        if !settings.selectionFallbackExcludedBundleIdentifiers.isEmpty {
+                            Divider()
+                            ForEach(settings.selectionFallbackExcludedBundleIdentifiers, id: \.self) {
+                                bundleIdentifier in
+                                HStack(spacing: ClipAllTheme.Spacing.sm) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(applicationName(for: bundleIdentifier))
+                                        Text(bundleIdentifier)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Button("移除") {
+                                        settings.setSelectionFallbackExcluded(
+                                            bundleIdentifier,
+                                            isExcluded: false
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Button("添加排除应用…") { chooseExcludedApplication() }
+                            .disabled(!settings.isSelectionFallbackEnabled)
                     }
                 }
 
@@ -92,6 +135,26 @@ struct GeneralSettingsView: View {
 
     private var shortcutLabel: String {
         settings.globalShortcut == .standard ? "⌃⌥Space" : "自定义快捷键"
+    }
+
+    private func chooseExcludedApplication() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        guard panel.runModal() == .OK,
+              let url = panel.url,
+              let bundleIdentifier = Bundle(url: url)?.bundleIdentifier,
+              bundleIdentifier != Bundle.main.bundleIdentifier else { return }
+        settings.setSelectionFallbackExcluded(bundleIdentifier, isExcluded: true)
+    }
+
+    private func applicationName(for bundleIdentifier: String) -> String {
+        guard let url = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: bundleIdentifier
+        ) else { return bundleIdentifier }
+        return FileManager.default.displayName(atPath: url.path)
     }
 
     private var permissionStatusText: String {

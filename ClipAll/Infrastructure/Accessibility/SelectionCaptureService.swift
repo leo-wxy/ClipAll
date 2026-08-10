@@ -8,6 +8,7 @@ enum SelectionCaptureError: Error, LocalizedError, Equatable, Sendable {
     case noFocusedElement
     case noSelection
     case unsupported
+    case secureInput
     case sourceUnavailable
 
     var errorDescription: String? {
@@ -20,6 +21,8 @@ enum SelectionCaptureError: Error, LocalizedError, Equatable, Sendable {
             "当前没有有效的文字选区"
         case .unsupported:
             "当前应用不提供选中文字"
+        case .secureInput:
+            "安全输入框不允许读取"
         case .sourceUnavailable:
             "来源应用暂时无法响应"
         }
@@ -28,7 +31,7 @@ enum SelectionCaptureError: Error, LocalizedError, Equatable, Sendable {
 
 @MainActor
 protocol SelectionCapturing: AnyObject {
-    func captureCurrentSelection(triggerLocation: CGPoint) throws -> SelectionContext
+    func captureCurrentSelection(triggerLocation: CGPoint) async throws -> SelectionContext
 }
 
 @MainActor
@@ -44,14 +47,22 @@ final class SelectionCaptureService: SelectionCapturing {
     }
 
     private let systemWideElement: AXUIElement
+    private let clipboardFallback: ClipboardSelectionFallback
+    private let isFallbackAllowed: @MainActor (String?) -> Bool
 
-    init(systemWideElement: AXUIElement = AXUIElementCreateSystemWide()) {
+    init(
+        systemWideElement: AXUIElement = AXUIElementCreateSystemWide(),
+        clipboardFallback: ClipboardSelectionFallback = ClipboardSelectionFallback(),
+        isFallbackAllowed: @escaping @MainActor (String?) -> Bool = { _ in false }
+    ) {
         self.systemWideElement = systemWideElement
+        self.clipboardFallback = clipboardFallback
+        self.isFallbackAllowed = isFallbackAllowed
     }
 
     func captureCurrentSelection(
         triggerLocation: CGPoint = NSEvent.mouseLocation
-    ) throws -> SelectionContext {
+    ) async throws -> SelectionContext {
         guard AXIsProcessTrusted() else {
             throw SelectionCaptureError.permissionRequired
         }
@@ -64,10 +75,36 @@ final class SelectionCaptureService: SelectionCapturing {
             throw SelectionCaptureError.noSelection
         }
 
-        let selection = try capturedSelection(
-            triggerLocation: triggerLocation,
-            sourceApplication: source
-        )
+        let selection: CapturedSelection
+        do {
+            selection = try capturedSelection(
+                triggerLocation: triggerLocation,
+                sourceApplication: source
+            )
+        } catch let error as SelectionCaptureError {
+            guard error.allowsClipboardFallback,
+                  let source,
+                  isFallbackAllowed(source.bundleIdentifier) else {
+                throw error
+            }
+
+            Self.logger.debug(
+                "AX selection unavailable; trying clipboard fallback for bundle=\(source.bundleIdentifier ?? "unknown", privacy: .public)"
+            )
+            do {
+                let text = try await clipboardFallback.captureSelection(
+                    sourceProcessIdentifier: source.processIdentifier
+                )
+                selection = CapturedSelection(text: text, bounds: nil)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let fallbackError as ClipboardSelectionFallbackError {
+                Self.logger.debug(
+                    "Clipboard fallback ended: error=\(String(describing: fallbackError), privacy: .public)"
+                )
+                throw fallbackError.selectionCaptureError
+            }
+        }
 
         guard let context = SelectionContext(
             text: selection.text,
@@ -138,7 +175,9 @@ final class SelectionCaptureService: SelectionCapturing {
             do {
                 return try capturedSelection(startingAt: candidate)
             } catch let error as SelectionCaptureError {
-                if error == .noSelection {
+                if error == .secureInput {
+                    throw error
+                } else if error == .noSelection {
                     finalError = .noSelection
                 }
             }
@@ -175,7 +214,7 @@ final class SelectionCaptureService: SelectionCapturing {
         for depth in 0..<32 {
             guard let element = candidate else { break }
             if isSecureTextElement(element) {
-                throw SelectionCaptureError.unsupported
+                throw SelectionCaptureError.secureInput
             }
             let selectedRange = selectedTextRange(in: element)
             let markerRange = selectedTextMarkerRange(in: element)
@@ -450,6 +489,28 @@ final class SelectionCaptureService: SelectionCapturing {
             .sourceUnavailable
         default:
             .noFocusedElement
+        }
+    }
+}
+
+private extension SelectionCaptureError {
+    var allowsClipboardFallback: Bool {
+        switch self {
+        case .noFocusedElement, .noSelection, .unsupported, .sourceUnavailable:
+            true
+        case .permissionRequired, .secureInput:
+            false
+        }
+    }
+}
+
+private extension ClipboardSelectionFallbackError {
+    var selectionCaptureError: SelectionCaptureError {
+        switch self {
+        case .sourceUnavailable, .clipboardChanged, .restoreFailed:
+            .sourceUnavailable
+        case .copyUnavailable, .timedOut, .unsafePasteboard:
+            .unsupported
         }
     }
 }
