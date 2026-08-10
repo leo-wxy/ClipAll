@@ -17,8 +17,6 @@ struct PluginDescriptor: Identifiable, Codable, Hashable, Sendable {
     let source: PluginSource
     let configurationFields: [PluginConfigurationField]
 
-    var isBundled: Bool { source == .builtIn }
-
     init(
         id: PluginID,
         name: String,
@@ -37,25 +35,6 @@ struct PluginDescriptor: Identifiable, Codable, Hashable, Sendable {
         self.configurationFields = configurationFields
     }
 
-    init(
-        id: PluginID,
-        name: String,
-        summary: String,
-        symbolName: String,
-        version: String,
-        isBundled: Bool,
-        configurationFields: [PluginConfigurationField] = []
-    ) {
-        self.init(
-            id: id,
-            name: name,
-            summary: summary,
-            symbolName: symbolName,
-            version: version,
-            source: isBundled ? .builtIn : .installed,
-            configurationFields: configurationFields
-        )
-    }
 }
 
 @MainActor

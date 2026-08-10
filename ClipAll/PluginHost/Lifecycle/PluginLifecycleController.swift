@@ -48,7 +48,6 @@ final class PluginLifecycleController: ObservableObject {
     private let registry: CapabilityRegistry
     private let settings: SettingsStore
     private let configurationStore: PluginConfigurationStore
-    private let executorFactory: ExternalPluginExecutorFactory
     private let runnerClient: PluginRunnerClient
     private let packageValidator: PluginPackageValidator
     private let developmentStore: DevelopmentPluginStore
@@ -70,10 +69,6 @@ final class PluginLifecycleController: ObservableObject {
         self.runnerClient = runnerClient
         self.packageValidator = packageValidator
         self.developmentStore = developmentStore
-        executorFactory = ExternalPluginExecutorFactory(
-            configurationStore: configurationStore,
-            runnerClient: runnerClient
-        )
     }
 
     func loadInstalled() async {
@@ -417,7 +412,15 @@ final class PluginLifecycleController: ObservableObject {
     }
 
     private func activate(_ package: ValidatedExternalPluginPackage) throws {
-        let executors = executorFactory.makeExecutors(for: package)
+        let executors: [any CapabilityExecuting] = package.definition.capabilities.map { definition in
+            ExternalPluginExecutor(
+                definition: definition,
+                script: package.script,
+                sourceName: package.definition.runtimeEntry,
+                configurationStore: configurationStore,
+                runnerClient: runnerClient
+            )
+        }
         try registry.register(
             descriptor: package.definition.descriptor,
             capabilities: executors

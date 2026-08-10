@@ -6,11 +6,9 @@ enum ClipAllTheme {
     static let canvas = Color(nsColor: .windowBackgroundColor)
     static let sidebar = Color(nsColor: .windowBackgroundColor)
     static let surface = Color(nsColor: .controlBackgroundColor)
-    static let elevatedSurface = Color(nsColor: .textBackgroundColor)
     static let separator = Color(nsColor: .separatorColor)
     static let border = Color.primary.opacity(0.095)
     static let quietFill = Color.primary.opacity(0.038)
-    static let hoverFill = Color.primary.opacity(0.055)
     static let pressedFill = Color.primary.opacity(0.09)
     static let accentSoft = accent.opacity(0.07)
     static let selectionFill = accent.opacity(0.075)
@@ -228,7 +226,7 @@ struct ClipAllSelectableRowStyle: ButtonStyle {
     }
 }
 
-private struct ClipAllHoverHighlight: NSViewRepresentable {
+struct ClipAllHoverHighlight: NSViewRepresentable {
     let cornerRadius: CGFloat
     let opacity: CGFloat
 
@@ -242,7 +240,7 @@ private struct ClipAllHoverHighlight: NSViewRepresentable {
     }
 }
 
-private final class ClipAllHoverTrackingView: NSView {
+final class ClipAllHoverTrackingView: NSView {
     var cornerRadius: CGFloat {
         didSet { layer?.cornerRadius = cornerRadius }
     }

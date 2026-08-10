@@ -173,8 +173,6 @@ enum CoreVerification {
                 purpose: "用于验证能力结果上限",
                 supportedContentKinds: [.text],
                 examples: [],
-                exclusions: [],
-                executionKind: .immediate,
                 routingRules: [
                     CapabilityRoutingRule(contentKind: .text, score: 60 - index, reason: "普通文本")
                 ]

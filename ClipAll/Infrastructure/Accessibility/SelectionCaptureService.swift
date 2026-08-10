@@ -109,7 +109,6 @@ final class SelectionCaptureService: SelectionCapturing {
         guard let context = SelectionContext(
             text: selection.text,
             sourceBundleIdentifier: source?.bundleIdentifier,
-            sourceApplicationName: source?.localizedName,
             selectionBounds: selection.bounds,
             triggerLocation: triggerLocation
         ) else {

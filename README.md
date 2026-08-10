@@ -65,6 +65,8 @@ Example.clipallplugin/
 ./Scripts/verify-all.sh
 ```
 
+`verify-all` 覆盖核心路由、浮层状态、翻译、Runner、插件运行时和安装生命周期；CI 随后构建完整 App bundle。
+
 完整边界和数据流见 [工程架构](Docs/Architecture.md)。真实取词、窗口焦点和系统翻译需要使用 `/Applications/ClipAll.app` 手动验收。
 
 ## 隐私与限制

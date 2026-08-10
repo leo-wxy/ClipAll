@@ -86,7 +86,5 @@ struct CapabilityDescriptor: Identifiable, Codable, Hashable, Sendable {
     let purpose: String
     let supportedContentKinds: Set<ContentKind>
     let examples: [String]
-    let exclusions: [String]
-    let executionKind: CapabilityExecutionKind
     let routingRules: [CapabilityRoutingRule]
 }

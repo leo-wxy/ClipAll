@@ -10,8 +10,6 @@ final class TranslationCapability: CapabilityExecuting {
         purpose: "使用系统设备端翻译或显式配置的 AI 提供方翻译文字。",
         supportedContentKinds: [.text, .foreignLanguage],
         examples: ["A good tool should shorten the distance from reading to action."],
-        exclusions: ["纯数字", "空白内容"],
-        executionKind: .resultPanel,
         routingRules: [
             CapabilityRoutingRule(contentKind: .foreignLanguage, score: 78, reason: "检测到与目标语言不同的文字"),
             CapabilityRoutingRule(contentKind: .text, score: 18, reason: "可翻译普通文本"),

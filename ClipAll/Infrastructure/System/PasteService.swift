@@ -1,15 +1,8 @@
 import Carbon.HIToolbox
 import CoreGraphics
-import Foundation
 
 @MainActor
-protocol TextPasting: AnyObject {
-    @discardableResult
-    func paste() -> Bool
-}
-
-@MainActor
-final class PasteService: TextPasting {
+final class PasteService {
     @discardableResult
     func paste() -> Bool {
         guard let source = CGEventSource(stateID: .hidSystemState),

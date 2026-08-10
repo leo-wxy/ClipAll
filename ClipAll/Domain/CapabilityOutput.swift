@@ -1,5 +1,3 @@
-import Foundation
-
 enum CapabilityResultValueStyle: String, Codable, Hashable, Sendable {
     case body
     case monospaced
@@ -34,8 +32,7 @@ struct CapabilityResult: Codable, Equatable, Sendable {
 }
 
 enum CapabilityOutput: Equatable, Sendable {
-    case completed(message: String?)
     case result(CapabilityResult)
-    case external(URL)
+    case external
     case translation(TranslationRequest)
 }

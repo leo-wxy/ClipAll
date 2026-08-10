@@ -1,21 +1,11 @@
 #!/bin/zsh
 
-set -euo pipefail
+source "${0:A:h}/verification-env.sh"
 
-PROJECT_ROOT="${0:A:h:h}"
-SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
-OUTPUT_DIR="$PROJECT_ROOT/.build/verification/runner-client"
-MODULE_CACHE="$PROJECT_ROOT/.swift-module-cache"
-ARCH="$(uname -m)"
-TARGET="${ARCH}-apple-macosx15.0"
+OUTPUT_DIR="$OUTPUT_DIR/runner-client"
+mkdir -p "$OUTPUT_DIR"
 
-mkdir -p "$OUTPUT_DIR" "$MODULE_CACHE"
-
-swiftc \
-  -swift-version 6 \
-  -target "$TARGET" \
-  -sdk "$SDK_PATH" \
-  -module-cache-path "$MODULE_CACHE" \
+verification_swiftc \
   -parse-as-library \
   -module-name ClipAllPluginProtocol \
   -emit-module \
@@ -24,11 +14,7 @@ swiftc \
   -o "$OUTPUT_DIR/ClipAllPluginProtocol.o" \
   "$PROJECT_ROOT/ClipAllPluginProtocol/PluginRuntimeProtocol.swift"
 
-swiftc \
-  -swift-version 6 \
-  -target "$TARGET" \
-  -sdk "$SDK_PATH" \
-  -module-cache-path "$MODULE_CACHE" \
+verification_swiftc \
   -I "$OUTPUT_DIR" \
   "$PROJECT_ROOT/ClipAll/PluginHost/Runtime/PluginRunnerClient.swift" \
   "$PROJECT_ROOT/Verification/PluginRunnerClientVerification.swift" \

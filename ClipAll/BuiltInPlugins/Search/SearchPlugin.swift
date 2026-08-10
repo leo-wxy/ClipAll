@@ -38,8 +38,6 @@ final class SearchCapability: CapabilityExecuting {
         purpose: "使用所选搜索引擎在默认浏览器中搜索文字。",
         supportedContentKinds: Set(ContentKind.allCases),
         examples: ["Swift concurrency", "上海天气"],
-        exclusions: [],
-        executionKind: .external,
         routingRules: [
             CapabilityRoutingRule(contentKind: .text, score: 25, reason: "可作为网页搜索关键词"),
             CapabilityRoutingRule(contentKind: .url, score: 20, reason: "可搜索这个网址"),
@@ -48,9 +46,9 @@ final class SearchCapability: CapabilityExecuting {
     )
 
     private let configurationStore: PluginConfigurationStore
-    private let browser: BrowserOpening
+    private let browser: BrowserService
 
-    init(configurationStore: PluginConfigurationStore, browser: BrowserOpening) {
+    init(configurationStore: PluginConfigurationStore, browser: BrowserService) {
         self.configurationStore = configurationStore
         self.browser = browser
     }
@@ -68,7 +66,7 @@ final class SearchCapability: CapabilityExecuting {
         guard browser.open(url) else {
             throw CapabilityError.unavailable("默认浏览器无法打开搜索")
         }
-        return .external(url)
+        return .external
     }
 }
 
@@ -79,7 +77,7 @@ final class SearchPlugin: ClipAllPlugin {
     let descriptor: PluginDescriptor
     let capabilities: [any CapabilityExecuting]
 
-    init(configurationStore: PluginConfigurationStore, browser: BrowserOpening) {
+    init(configurationStore: PluginConfigurationStore, browser: BrowserService) {
         descriptor = PluginDescriptor(
             id: .search,
             name: "搜索",

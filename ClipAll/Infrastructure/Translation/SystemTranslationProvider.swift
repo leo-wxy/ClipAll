@@ -3,16 +3,6 @@ import Translation
 
 @MainActor
 enum SystemTranslationProvider {
-    static func configuration(
-        for request: TranslationRequest
-    ) throws -> TranslationSession.Configuration {
-        guard request.providerID == .system else {
-            throw CapabilityError.unavailable("当前翻译请求不是设备端翻译")
-        }
-        let target = Locale.Language(identifier: request.targetLanguageIdentifier)
-        return TranslationSession.Configuration(source: nil, target: target)
-    }
-
     static func result(
         from response: TranslationSession.Response,
         request: TranslationRequest

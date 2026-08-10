@@ -53,25 +53,3 @@ extension PluginID {
     static let translation: PluginID = "builtin.translation"
     static let timestampTools: PluginID = "com.clipall.plugin.timestamp-tools"
 }
-
-struct SearchProviderID: RawRepresentable, Hashable, Codable, Sendable, ExpressibleByStringLiteral {
-    let rawValue: String
-
-    init(rawValue: String) {
-        self.rawValue = rawValue
-    }
-
-    init(_ rawValue: String) {
-        self.rawValue = rawValue
-    }
-
-    init(stringLiteral value: StringLiteralType) {
-        rawValue = value
-    }
-}
-
-extension SearchProviderID {
-    static let google: SearchProviderID = "google"
-    static let bing: SearchProviderID = "bing"
-    static let duckDuckGo: SearchProviderID = "duckduckgo"
-}

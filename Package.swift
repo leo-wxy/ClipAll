@@ -32,10 +32,5 @@ let package = Package(
                 .linkedFramework("JavaScriptCore"),
             ]
         ),
-        .testTarget(
-            name: "ClipAllTests",
-            dependencies: ["ClipAll"],
-            path: "ClipAllTests"
-        ),
     ]
 )

@@ -272,8 +272,6 @@ struct ExternalPluginManifestMapper: Sendable {
                     purpose: capability.purpose,
                     supportedContentKinds: supportedKinds,
                     examples: Array(capability.examples.prefix(12)),
-                    exclusions: Array(capability.exclusions.prefix(12)),
-                    executionKind: capability.executionKind,
                     routingRules: capability.routingRules
                 ),
                 handler: capability.handler

@@ -4,7 +4,6 @@ struct PluginInstallationReceipt: Codable, Equatable, Sendable {
     let pluginID: PluginID
     let version: String
     let fingerprint: String
-    let installedAt: Date
 }
 
 struct PreparedPluginImport: Identifiable, Sendable {
@@ -146,12 +145,10 @@ actor PluginInstallationStore {
             let newReceipt = PluginInstallationReceipt(
                 pluginID: pluginID,
                 version: installed.definition.descriptor.version,
-                fingerprint: installed.fingerprint,
-                installedAt: Date()
+                fingerprint: installed.fingerprint
             )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            encoder.dateEncodingStrategy = .iso8601
             attemptedNewReceiptWrite = true
             try encoder.encode(newReceipt).write(to: receipt, options: .atomic)
             return installed
@@ -322,7 +319,6 @@ actor PluginInstallationStore {
 
     private func loadReceipt(pluginID: PluginID) throws -> PluginInstallationReceipt {
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
         do {
             return try decoder.decode(
                 PluginInstallationReceipt.self,

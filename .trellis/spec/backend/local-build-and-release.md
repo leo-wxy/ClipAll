@@ -69,8 +69,8 @@ and launches that path.
 - `Scripts/package-release.sh`: verify the App signature and version, create the
   DMG/zip pair, verify the DMG, and validate both SHA-256 files.
 - `swift build --target ClipAll`: assert the app module compiles.
-- CI with full Xcode runs `swift test`; CLT-only environments may not provide
-  `XCTest` and must report that limitation rather than hiding it.
+- CI runs `Scripts/verify-all.sh` and assembles the complete App bundle; do not
+  add a tautological XCTest target solely to make `swift test` report success.
 - After installation, verify nested runner and App signatures, confirm exactly one
   Applications process, and visually check the Applications copy.
 

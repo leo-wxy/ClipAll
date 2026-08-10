@@ -115,23 +115,3 @@ final class ExternalPluginExecutor: CapabilityExecuting {
         )
     }
 }
-
-@MainActor
-struct ExternalPluginExecutorFactory {
-    let configurationStore: PluginConfigurationStore
-    let runnerClient: PluginRunnerClient
-
-    func makeExecutors(
-        for package: ValidatedExternalPluginPackage
-    ) -> [any CapabilityExecuting] {
-        package.definition.capabilities.map { definition in
-            ExternalPluginExecutor(
-                definition: definition,
-                script: package.script,
-                sourceName: package.definition.runtimeEntry,
-                configurationStore: configurationStore,
-                runnerClient: runnerClient
-            )
-        }
-    }
-}

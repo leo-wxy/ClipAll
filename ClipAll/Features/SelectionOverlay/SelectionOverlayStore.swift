@@ -36,8 +36,8 @@ final class SelectionOverlayStore: ObservableObject {
     private let registry: CapabilityRegistry
     private let settings: SettingsStore
     private let configuration: PluginConfigurationStore
-    private let clipboard: any ClipboardWriting
-    private let textPaster: any TextPasting
+    private let clipboard: ClipboardService
+    private let textPaster: PasteService
     private let openAITranslation: OpenAICompatibleTranslationProvider
     private let featureExtractor: ContentFeatureExtractor
     private let router: CapabilityRouter
@@ -50,8 +50,8 @@ final class SelectionOverlayStore: ObservableObject {
         registry: CapabilityRegistry,
         settings: SettingsStore,
         configuration: PluginConfigurationStore,
-        clipboard: any ClipboardWriting,
-        textPaster: any TextPasting,
+        clipboard: ClipboardService,
+        textPaster: PasteService,
         openAITranslation: OpenAICompatibleTranslationProvider,
         featureExtractor: ContentFeatureExtractor = ContentFeatureExtractor(),
         router: CapabilityRouter = CapabilityRouter(),
@@ -330,8 +330,6 @@ final class SelectionOverlayStore: ObservableObject {
     ) {
         guard context?.id == contextID else { return }
         switch output {
-        case let .completed(message):
-            showTransientMessage(message ?? "已完成")
         case let .result(result):
             phase = .result(capabilityID, result)
         case .external:

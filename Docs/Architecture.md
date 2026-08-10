@@ -28,7 +28,6 @@ ClipAllPluginRunner/        # 独立短进程；只链接 Foundation/JavaScriptC
 PluginSDK/Schemas/          # 机器可读兼容合同
 Plugins/Examples/           # 不参与主 App 编译的外置示例包
 Docs/PluginSDK/             # 插件作者文档
-ClipAllTests/               # SwiftPM/XCTest 冒烟入口
 Verification/               # CLT 可运行的核心、Runner 与生命周期验收程序
 ```
 

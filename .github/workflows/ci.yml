@@ -27,9 +27,6 @@ jobs:
       - name: Run verification suite
         run: Scripts/verify-all.sh
 
-      - name: Run XCTest smoke suite
-        run: swift test --disable-sandbox --build-system native
-
       - name: Build ad-hoc app
         env:
           CLIPALL_ADHOC: "1"

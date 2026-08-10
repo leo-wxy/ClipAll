@@ -425,7 +425,7 @@ private struct OverlayChromeButtonStyle: ButtonStyle {
         configuration.label
             .background {
                 ZStack {
-                    OverlayHoverHighlight(
+                    ClipAllHoverHighlight(
                         cornerRadius: ClipAllTheme.Radius.overlayChrome,
                         opacity: 0.075
                     )
@@ -448,7 +448,7 @@ private struct OverlayRowButtonStyle: ButtonStyle {
         configuration.label
             .background {
                 ZStack {
-                    OverlayHoverHighlight(cornerRadius: 8, opacity: 0.07)
+                    ClipAllHoverHighlight(cornerRadius: 8, opacity: 0.07)
                     if configuration.isPressed {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .fill(Color.primary.opacity(0.12))
@@ -456,76 +456,6 @@ private struct OverlayRowButtonStyle: ButtonStyle {
                 }
             }
             .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
-    }
-}
-
-private struct OverlayHoverHighlight: NSViewRepresentable {
-    let cornerRadius: CGFloat
-    let opacity: CGFloat
-
-    func makeNSView(context: Context) -> OverlayHoverTrackingView {
-        OverlayHoverTrackingView(cornerRadius: cornerRadius, highlightOpacity: opacity)
-    }
-
-    func updateNSView(_ nsView: OverlayHoverTrackingView, context: Context) {
-        nsView.cornerRadius = cornerRadius
-        nsView.highlightOpacity = opacity
-    }
-}
-
-private final class OverlayHoverTrackingView: NSView {
-    var cornerRadius: CGFloat {
-        didSet { layer?.cornerRadius = cornerRadius }
-    }
-    var highlightOpacity: CGFloat {
-        didSet { updateHighlight() }
-    }
-
-    private var trackingAreaReference: NSTrackingArea?
-    private var isHighlighted = false
-
-    init(cornerRadius: CGFloat, highlightOpacity: CGFloat) {
-        self.cornerRadius = cornerRadius
-        self.highlightOpacity = highlightOpacity
-        super.init(frame: .zero)
-        wantsLayer = true
-        layer?.cornerRadius = cornerRadius
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-    override func updateTrackingAreas() {
-        if let trackingAreaReference {
-            removeTrackingArea(trackingAreaReference)
-        }
-        let trackingArea = NSTrackingArea(
-            rect: .zero,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(trackingArea)
-        trackingAreaReference = trackingArea
-        super.updateTrackingAreas()
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        isHighlighted = true
-        updateHighlight()
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        isHighlighted = false
-        updateHighlight()
-    }
-
-    private func updateHighlight() {
-        layer?.backgroundColor = isHighlighted
-            ? NSColor.labelColor.withAlphaComponent(highlightOpacity).cgColor
-            : NSColor.clear.cgColor
     }
 }
 
