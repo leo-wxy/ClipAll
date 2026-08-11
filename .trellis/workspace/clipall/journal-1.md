@@ -25,3 +25,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 2: 修复浮窗关闭与选择误触
+
+**Date**: 2026-08-11
+**Task**: 修复浮窗关闭与选择误触
+**Branch**: `main`
+
+### Summary
+
+外部能力执行前同步关闭浮窗；按指针意图、AX 命中语义和剪贴板对象类型过滤选择误触；完成 VSCode、DevEco 与 Codex 回归验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4bddbf7` | (see git log) |
+
+### Status
+
+[OK] **Completed**
