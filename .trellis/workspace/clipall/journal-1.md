@@ -67,3 +67,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 4: 应用入口可见性设置
+
+**Date**: 2026-08-11
+**Task**: 应用入口可见性设置
+**Branch**: `main`
+
+### Summary
+
+新增 Dock 与菜单栏图标独立开关，持久化设置并保证至少保留一个入口；完成全量验证并安装到 Applications。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b411990` | (see git log) |
+
+### Status
+
+[OK] **Completed**
