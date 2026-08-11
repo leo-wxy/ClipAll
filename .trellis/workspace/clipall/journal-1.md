@@ -46,3 +46,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 3: 修复无 AX App 双击取词
+
+**Date**: 2026-08-11
+**Task**: 修复无 AX App 双击取词
+**Branch**: `main`
+
+### Summary
+
+基于 POPO 运行日志区分空 AX 命中与明确非文字目标，复用受约束剪贴板回退；完成全量验证、稳定签名安装和跨 App 手测。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dc4dffc` | (see git log) |
+
+### Status
+
+[OK] **Completed**
