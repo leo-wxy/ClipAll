@@ -2,12 +2,14 @@ import AppKit
 import Carbon.HIToolbox
 import CoreGraphics
 import Foundation
+import UniformTypeIdentifiers
 
 enum ClipboardSelectionFallbackError: Error, Equatable, Sendable {
     case sourceUnavailable
     case copyUnavailable
     case timedOut
     case unsafePasteboard
+    case nonTextContent
     case clipboardChanged
     case restoreFailed
 }
@@ -37,6 +39,47 @@ final class ClipboardSelectionFallback {
     private static let maximumItems = 16
     private static let maximumTypes = 64
     private static let maximumBytes = 32 * 1_024 * 1_024
+    private static let pasteboardTagClass = UTTagClass(rawValue: "com.apple.nspboard-type")
+    private static let nonTextObjectTypeIdentifiers: Set<String> = [
+        NSPasteboard.PasteboardType.fileURL.rawValue,
+        "Apple URL pasteboard type",
+        "NSFilenamesPboardType",
+        "NSFilesPromisePboardType",
+        "com.apple.finder.noderef",
+        "com.apple.filepromise",
+        "com.apple.pasteboard.promised-file-content-type",
+        "com.apple.pasteboard.promised-file-url",
+        "com.adobe.pdf",
+        "com.apple.icns",
+        "com.apple.quicktime-movie",
+        "com.compuserve.gif",
+        "com.microsoft.bmp",
+        "com.microsoft.waveform-audio",
+        "fndf",
+        "org.gnu.gnu-zip-archive",
+        "org.webmproject.webp",
+        "public.aiff-audio",
+        "public.archive",
+        "public.audio",
+        "public.audiovisual-content",
+        "public.font",
+        "public.heic",
+        "public.image",
+        "public.jpeg",
+        "public.movie",
+        "public.mp3",
+        "public.mpeg-4",
+        "public.mpeg-4-audio",
+        "public.opentype-font",
+        "public.png",
+        "public.tar-archive",
+        "public.tiff",
+        "public.truetype-font",
+        "public.vcard",
+        "public.zip-archive",
+        "text/uri-list",
+        "x-special/gnome-copied-files",
+    ]
 
     private let pasteboard: any ClipboardPasteboard
     private let timeout: Duration
@@ -91,8 +134,13 @@ final class ClipboardSelectionFallback {
                 if currentChangeCount != clearedChangeCount {
                     if let capturedChangeCount, currentChangeCount != capturedChangeCount {
                         throw ClipboardSelectionFallbackError.clipboardChanged
+                    } else if capturedChangeCount == nil {
+                        capturedChangeCount = currentChangeCount
                     }
-                    capturedChangeCount = currentChangeCount
+
+                    if containsNonTextObject() {
+                        throw ClipboardSelectionFallbackError.nonTextContent
+                    }
 
                     if let text = pasteboard.string(forType: .string),
                        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -128,6 +176,32 @@ final class ClipboardSelectionFallback {
             }
             throw error
         }
+    }
+
+    private func containsNonTextObject() -> Bool {
+        guard let items = pasteboard.pasteboardItems else { return false }
+        return items.contains { item in
+            item.types.contains { type in
+                let identifier = type.rawValue
+                if Self.isNonTextObjectType(identifier) {
+                    return true
+                }
+
+                let pasteboardAliases = UTType(identifier)?.tags[Self.pasteboardTagClass] ?? []
+                if pasteboardAliases.contains(where: Self.isNonTextObjectType) {
+                    return true
+                }
+                return false
+            }
+        }
+    }
+
+    private static func isNonTextObjectType(_ identifier: String) -> Bool {
+        if nonTextObjectTypeIdentifiers.contains(identifier) {
+            return true
+        }
+        let normalized = identifier.lowercased()
+        return normalized.contains("filepromise") || normalized.contains("promised-file")
     }
 
     private func snapshotPasteboard() throws -> Snapshot {

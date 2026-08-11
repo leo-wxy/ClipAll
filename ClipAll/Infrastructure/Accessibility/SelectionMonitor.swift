@@ -32,10 +32,30 @@ final class SelectionMonitor {
         let bounds: CGRect?
     }
 
-    private enum CaptureTrigger: String {
-        case pointer
+    private enum CaptureTrigger {
+        case pointer(PointerSelectionIntent)
         case hotKey
         case manual
+
+        var name: String {
+            switch self {
+            case let .pointer(intent):
+                "pointer-\(intent.rawValue)"
+            case .hotKey:
+                "hotKey"
+            case .manual:
+                "manual"
+            }
+        }
+
+        var fallbackPolicy: SelectionFallbackPolicy {
+            switch self {
+            case let .pointer(intent):
+                intent.fallbackPolicy
+            case .hotKey, .manual:
+                .enabled
+            }
+        }
     }
 
     private let captureService: any SelectionCapturing
@@ -157,7 +177,7 @@ final class SelectionMonitor {
         isShiftPressed: Bool
     ) {
         guard isRunning,
-              pointerGesture.end(
+              let intent = pointerGesture.end(
                   at: location,
                   clickCount: clickCount,
                   isShiftPressed: isShiftPressed
@@ -165,7 +185,7 @@ final class SelectionMonitor {
         scheduleCapture(
             after: .milliseconds(45),
             allowsDuplicate: false,
-            trigger: .pointer
+            trigger: .pointer(intent)
         )
     }
 
@@ -237,18 +257,19 @@ final class SelectionMonitor {
                     try await Task.sleep(for: delay)
                 }
                 try Task.checkCancellation()
+                Self.logger.info(
+                    "Selection capture requested: trigger=\(trigger.name, privacy: .public), fallbackPolicy=\(trigger.fallbackPolicy.rawValue, privacy: .public)"
+                )
                 let context = try await captureService.captureCurrentSelection(
-                    triggerLocation: NSEvent.mouseLocation
+                    triggerLocation: NSEvent.mouseLocation,
+                    fallbackPolicy: trigger.fallbackPolicy
                 )
                 guard !Task.isCancelled, self.isRunning || !requiresRunning else { return }
                 guard allowsDuplicate || shouldPublish(context) else { return }
-                Self.logger.debug(
-                    "Selection captured: trigger=\(trigger.rawValue, privacy: .public), hasBounds=\(context.selectionBounds != nil, privacy: .public)"
-                )
                 onSelection(context)
             } catch let error as SelectionCaptureError {
                 Self.logger.debug(
-                    "Selection capture ended: trigger=\(trigger.rawValue, privacy: .public), error=\(String(describing: error), privacy: .public)"
+                    "Selection capture ended: trigger=\(trigger.name, privacy: .public), error=\(String(describing: error), privacy: .public)"
                 )
                 if error == .permissionRequired {
                     onPermissionRequired()
@@ -257,7 +278,7 @@ final class SelectionMonitor {
                 }
             } catch {
                 Self.logger.error(
-                    "Selection capture failed: trigger=\(trigger.rawValue, privacy: .public), errorType=\(String(describing: type(of: error)), privacy: .public)"
+                    "Selection capture failed: trigger=\(trigger.name, privacy: .public), errorType=\(String(describing: type(of: error)), privacy: .public)"
                 )
                 onSelectionInvalidated()
             }

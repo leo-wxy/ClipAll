@@ -41,6 +41,73 @@
 - Copy success dismisses immediately. New visual animation must not delay the
   store's dismissal or intercept source-app key events.
 
+## Scenario: External Capability Dismissal
+
+### 1. Scope / Trigger
+
+- Apply this contract when a capability opens another application or performs a
+  side effect that does not render a result inside the overlay.
+
+### 2. Signatures
+
+- `CapabilityExecuting.executionPresentation` returns `.overlay` by default.
+- Capabilities such as `SearchCapability` that return `CapabilityOutput.external`
+  declare `.external` explicitly.
+
+### 3. Contracts
+
+- `SelectionOverlayStore.execute` must set `isVisible = false` before starting
+  an external executor. It must not enter `.executing`, a transient message, or
+  any other phase that changes panel height.
+- `SelectionOverlayCoordinator` observes `store.$isVisible`; a `false` value
+  cancels pending geometry synchronization and calls `orderOut` synchronously.
+- External success records recent use. Failure logs only capability and error
+  types and never recreates the dismissed context or logs selected text.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+|---|---|
+| External executor starts | Store and panel are already hidden |
+| External output succeeds | Record recent use; do not reopen overlay |
+| External executor fails | Log structural metadata only; stay hidden |
+| `.external` executor returns an overlay output | Log contract violation; stay hidden |
+| `.overlay` executor returns `.external` | Show a contract failure in the existing overlay |
+
+### 5. Good / Base / Bad Cases
+
+- Good: Search hides the panel in the button event turn, then opens the browser.
+- Base: Translation remains `.overlay` and keeps its progress/result UI.
+- Bad: Set `.executing`, open the browser, show a 650ms success message, and
+  dismiss afterward; the intermediate relayout is visible as a jump.
+
+### 6. Tests Required
+
+- `Verification/OverlayExecutionVerification.swift` asserts synchronous Store
+  dismissal, `.ready` phase, hidden-before-execute ordering, one execution, and
+  recent-use recording.
+- Manual QA uses `/Applications/ClipAll.app` and checks that Search disappears
+  in place before the browser activates.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```swift
+phase = .executing(capabilityID)
+let output = try await executor.execute(in: context)
+showTransientMessage("Opened", dismissAfter: true)
+```
+
+#### Correct
+
+```swift
+if executor.executionPresentation == .external {
+    dismiss()
+    executionTask = Task { try await executor.execute(in: context) }
+}
+```
+
 ## Scenario: Cross-App Selection Trigger And Capture
 
 ### 1. Scope / Trigger
@@ -56,10 +123,12 @@
 - `PointerSelectionGesture.begin(at:)` starts one pointer gesture.
 - `PointerSelectionGesture.update(at:)` records whether movement reaches the
   four-point drag threshold.
-- `PointerSelectionGesture.end(at:clickCount:isShiftPressed:) -> Bool` returns
-  whether the gesture is an explicit selection action and always resets state.
-- The async `SelectionCapturing.captureCurrentSelection(triggerLocation:)` is
-  the single capture entry used by pointer, registered hotkey, and menu commands.
+- `PointerSelectionGesture.end(at:clickCount:isShiftPressed:) -> PointerSelectionIntent?`
+  returns `.drag`, `.multiClick`, `.shiftClick`, or `nil` and always resets state.
+- `PointerSelectionIntent.fallbackPolicy` maps `.drag` to `.enabled`,
+  `.multiClick` to `.textHitRequired`, and `.shiftClick` to `.disabled`.
+- The async `SelectionCapturing.captureCurrentSelection(triggerLocation:fallbackPolicy:)`
+  is the single capture entry used by pointer, registered hotkey, and menu commands.
 
 ### 3. Contracts
 
@@ -71,11 +140,24 @@
 - Resolve AX candidates in this order: system-wide focus, frontmost application
   focus, then element-at-pointer. For each candidate, inspect a bounded ancestor
   chain for standard selected text/range and Text Marker selection.
-- If AX fails after an explicit capture action, compatibility capture may send
-  one targeted `⌘C` only when enabled and the source bundle is not excluded.
+- If AX fails after pointer drag, registered hotkey, or menu capture,
+  compatibility capture may send one targeted `⌘C` only when enabled and the
+  source bundle is not excluded. Multi-click additionally requires the pointer
+  hit ancestry to expose selected-text attributes or character-range semantics;
+  the complete bounded path is scanned before accepting that evidence. Hard
+  control roles/actions and paths ending at a window are rejected before
+  copying. `AXShowMenu` alone is not a blocker because Electron text surfaces
+  expose it together with real selection semantics.
+  Shift-click is AX-only.
 - Clipboard fallback snapshots all readable pasteboard items before clearing,
   waits asynchronously for a new change count, and restores only while it still
   owns the current generation. A later external write must never be overwritten.
+- Before reading a string representation, clipboard fallback rejects a new item
+  containing file URLs, file lists, Finder node references, promised-file,
+  image, audio/video, PDF, archive, vCard, or font types, then restores the
+  owned clipboard generation. Dynamic UTIs must also be decoded through their
+  `com.apple.nspboard-type` tags before classification; comparing only the
+  outer `dyn.*` identifier is insufficient.
 - Secure text fields fail with `secureInput` and never enter clipboard fallback.
   Selected text is never written to diagnostics; logs may contain only trigger
   type, AX role, error type, and bounds presence.
@@ -87,14 +169,21 @@
 | Single click with retained highlight | No capture and no overlay |
 | Drag below four points | No capture |
 | Drag at least four points | Capture after the short selection-settle delay |
-| Double/triple click | Capture after mouse-up |
-| Shift-click | Capture after mouse-up |
+| Double/triple click with AX text | Capture after mouse-up without fallback |
+| Double/triple click with non-AX text semantics at the pointer | Use filtered fallback and publish text |
+| VSCode text path with selection attributes and `AXShowMenu` | Accept after the complete path has no hard control role |
+| Double/triple click on an IDE tab while editor text remains selected | Reject before `⌘C`; never publish stale editor text |
+| Double/triple click on a typed non-text object | Reject copied object; no overlay |
+| Shift-click with AX text | Capture after mouse-up without fallback |
+| Shift-click on a non-text object | No `⌘C`; no overlay |
 | Registered hotkey | Capture without pointer-gesture state |
 | Missing system-wide focus | Try frontmost-app focus, then pointer hit-test |
 | Text Marker selection only | Resolve text locally; bounds may fall back to pointer |
 | AX unsupported, fallback enabled | Temporarily copy, restore, and publish a new context |
 | Fallback timeout/cancel | Restore the owned clipboard generation; publish nothing |
 | Clipboard changed externally | Preserve the external content; publish nothing |
+| Clipboard item has file and text representations | Reject the object, restore, publish nothing |
+| Dynamic UTI resolves to a legacy file-list pasteboard type | Reject the object, restore, publish nothing |
 | Secure field | Return `secureInput`; never copy or expose text |
 | No supported selection | Quietly invalidate/dismiss; never reuse old context |
 
@@ -103,7 +192,13 @@
 - Good: a WebView exposes selection on an `AXGroup`; pointer hit-test plus
   ancestor traversal resolves it and presents the panel.
 - Base: TextEdit drag selection resolves standard selected text and range.
+- Good: double-clicking a Finder or IDE folder may copy once after AX fails, but
+  the file/object type rejects its attached string and restores the clipboard.
+- Good: double-clicking an IDE tab is rejected before copy when its hit path has
+  no text-selection semantics, even if the focused editor retains a selection.
 - Bad: every global mouse-up captures whatever text remains highlighted.
+- Bad: accepting `.string` before checking whether the same item is a file,
+  image, or another typed object.
 - Bad: implementing the shortcut with a normal key monitor, which can duplicate
   source-app input or interfere with IME composition.
 
@@ -111,7 +206,8 @@
 
 - `Scripts/verify-overlay-state.sh` asserts explicit gesture rules, fallback
   success, equal-text detection, multi-type restore, timeout, cancellation,
-  concurrent clipboard changes, and fail-before-clear snapshot limits.
+  concurrent clipboard changes, AX hit classification for text/file-tree/tab,
+  file-object rejection, and fail-before-clear snapshot limits.
 - `swift build --target ClipAll` verifies AppKit/Carbon integration compiles.
 - Manual QA must use `/Applications/ClipAll.app`: test TextEdit drag, double
   click, retained-highlight single click, normal typing, registered shortcut,
@@ -133,7 +229,8 @@ NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { _ in
 NSEvent.addGlobalMonitorForEvents(
     matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
 ) { event in
-    // Feed a bounded gesture state machine; capture only after drag or multi-click.
+    // Feed a bounded gesture state machine. Drag may use filtered fallback;
+    // multi-click first requires text hit evidence; Shift-click remains AX-only.
 }
 ```
 

@@ -1,5 +1,28 @@
 import CoreGraphics
 
+enum SelectionFallbackPolicy: String, Equatable, Sendable {
+    case disabled
+    case textHitRequired
+    case enabled
+}
+
+enum PointerSelectionIntent: String, Equatable, Sendable {
+    case drag
+    case multiClick
+    case shiftClick
+
+    var fallbackPolicy: SelectionFallbackPolicy {
+        switch self {
+        case .drag:
+            .enabled
+        case .multiClick:
+            .textHitRequired
+        case .shiftClick:
+            .disabled
+        }
+    }
+}
+
 struct PointerSelectionGesture: Sendable {
     static let minimumDragDistance: CGFloat = 4
 
@@ -23,11 +46,20 @@ struct PointerSelectionGesture: Sendable {
         at location: CGPoint,
         clickCount: Int,
         isShiftPressed: Bool = false
-    ) -> Bool {
+    ) -> PointerSelectionIntent? {
         update(at: location)
-        let shouldCapture = exceededDragThreshold || clickCount >= 2 || isShiftPressed
+        let intent: PointerSelectionIntent?
+        if isShiftPressed {
+            intent = .shiftClick
+        } else if clickCount >= 2 {
+            intent = .multiClick
+        } else if exceededDragThreshold {
+            intent = .drag
+        } else {
+            intent = nil
+        }
         reset()
-        return shouldCapture
+        return intent
     }
 
     mutating func reset() {

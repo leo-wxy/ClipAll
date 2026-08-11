@@ -65,6 +65,14 @@ final class SelectionOverlayCoordinator {
             }
             .store(in: &cancellables)
 
+        store.$isVisible
+            .removeDuplicates()
+            .sink { [weak self] isVisible in
+                guard !isVisible else { return }
+                self?.hidePanel()
+            }
+            .store(in: &cancellables)
+
         installDismissMonitors()
         installWorkspaceMonitor()
     }
@@ -78,21 +86,29 @@ final class SelectionOverlayCoordinator {
     }
 
     func dismiss() {
+        store.dismiss()
+        if panel.isVisible {
+            hidePanel()
+        }
+    }
+
+    private func hidePanel() {
         synchronizationTask?.cancel()
         synchronizationTask = nil
-        store.dismiss()
         positionedContextID = nil
         anchoredTopLeft = nil
         if panel.isKeyWindow {
             panel.resignKey()
         }
         panel.allowsKeyboardInput = false
-        panel.orderOut(nil)
+        if panel.isVisible {
+            panel.orderOut(nil)
+        }
     }
 
     private func synchronizePanel() {
         guard store.isVisible, let context = store.context else {
-            panel.orderOut(nil)
+            hidePanel()
             return
         }
 

@@ -1,12 +1,12 @@
 import Combine
 import Foundation
+import OSLog
 
 enum SelectionOverlayPhase: Equatable {
     case ready
     case executing(CapabilityID)
     case result(CapabilityID, CapabilityResult)
     case translation(CapabilityID, TranslationRequest)
-    case message(String)
     case failure(CapabilityID?, String)
 }
 
@@ -24,6 +24,11 @@ struct PluginDiscoverySections: Equatable, Sendable {
 
 @MainActor
 final class SelectionOverlayStore: ObservableObject {
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "com.wxy.ClipAll",
+        category: "SelectionOverlayStore"
+    )
+
     @Published private(set) var isVisible = false
     @Published private(set) var context: SelectionContext?
     @Published private(set) var fixedCapabilities: [CapabilityDescriptor] = []
@@ -44,7 +49,6 @@ final class SelectionOverlayStore: ObservableObject {
     private let discoveryModel: CapabilityDiscoveryModel
 
     private var executionTask: Task<Void, Never>?
-    private var feedbackTask: Task<Void, Never>?
 
     init(
         registry: CapabilityRegistry,
@@ -112,7 +116,6 @@ final class SelectionOverlayStore: ObservableObject {
 
     func present(_ context: SelectionContext) {
         executionTask?.cancel()
-        feedbackTask?.cancel()
         self.context = context
         phase = .ready
         isMorePresented = false
@@ -123,9 +126,7 @@ final class SelectionOverlayStore: ObservableObject {
 
     func dismiss() {
         executionTask?.cancel()
-        feedbackTask?.cancel()
         executionTask = nil
-        feedbackTask = nil
         isVisible = false
         context = nil
         fixedCapabilities = []
@@ -192,9 +193,20 @@ final class SelectionOverlayStore: ObservableObject {
             return
         }
 
+        switch executor.executionPresentation {
+        case .overlay:
+            executeInOverlay(executor, capabilityID: capabilityID, context: context)
+        case .external:
+            executeExternally(executor, capabilityID: capabilityID, context: context)
+        }
+    }
+
+    private func executeInOverlay(
+        _ executor: any CapabilityExecuting,
+        capabilityID: CapabilityID,
+        context: SelectionContext
+    ) {
         let contextID = context.id
-        feedbackTask?.cancel()
-        feedbackTask = nil
         isMorePresented = false
         moreQuery = ""
         phase = .executing(capabilityID)
@@ -227,6 +239,36 @@ final class SelectionOverlayStore: ObservableObject {
                 self.phase = .failure(
                     capabilityID,
                     (error as? LocalizedError)?.errorDescription ?? "能力执行失败"
+                )
+            }
+        }
+    }
+
+    private func executeExternally(
+        _ executor: any CapabilityExecuting,
+        capabilityID: CapabilityID,
+        context: SelectionContext
+    ) {
+        dismiss()
+        executionTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let output = try await executor.execute(in: context)
+                try Task.checkCancellation()
+                guard case .external = output else {
+                    Self.logger.error(
+                        "External capability returned an overlay output: id=\(capabilityID.rawValue, privacy: .public)"
+                    )
+                    return
+                }
+                self.settings.recordUse(of: capabilityID)
+            } catch is CancellationError {
+                return
+            } catch CapabilityError.cancelled {
+                return
+            } catch {
+                Self.logger.error(
+                    "External capability execution failed: id=\(capabilityID.rawValue, privacy: .public), errorType=\(String(describing: type(of: error)), privacy: .public)"
                 )
             }
         }
@@ -333,24 +375,12 @@ final class SelectionOverlayStore: ObservableObject {
         case let .result(result):
             phase = .result(capabilityID, result)
         case .external:
-            showTransientMessage("已在浏览器中打开", dismissAfter: true)
+            Self.logger.error(
+                "Overlay capability returned an external output: id=\(capabilityID.rawValue, privacy: .public)"
+            )
+            phase = .failure(capabilityID, "能力返回了无法显示的结果")
         case let .translation(request):
             phase = .translation(capabilityID, request)
-        }
-    }
-
-    private func showTransientMessage(_ message: String, dismissAfter: Bool = false) {
-        guard let contextID = context?.id else { return }
-        feedbackTask?.cancel()
-        phase = .message(message)
-        feedbackTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(650))
-            guard let self, self.context?.id == contextID else { return }
-            if dismissAfter {
-                self.dismiss()
-            } else {
-                self.phase = .ready
-            }
         }
     }
 }

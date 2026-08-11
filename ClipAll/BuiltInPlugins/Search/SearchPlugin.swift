@@ -44,6 +44,7 @@ final class SearchCapability: CapabilityExecuting {
             CapabilityRoutingRule(contentKind: .code, score: 30, reason: "可搜索相关代码资料"),
         ]
     )
+    let executionPresentation = CapabilityExecutionPresentation.external
 
     private let configurationStore: PluginConfigurationStore
     private let browser: BrowserService

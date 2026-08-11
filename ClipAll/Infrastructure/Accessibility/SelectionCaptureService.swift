@@ -31,7 +31,64 @@ enum SelectionCaptureError: Error, LocalizedError, Equatable, Sendable {
 
 @MainActor
 protocol SelectionCapturing: AnyObject {
-    func captureCurrentSelection(triggerLocation: CGPoint) async throws -> SelectionContext
+    func captureCurrentSelection(
+        triggerLocation: CGPoint,
+        fallbackPolicy: SelectionFallbackPolicy
+    ) async throws -> SelectionContext
+}
+
+struct SelectionHitEvidenceNode {
+    let role: String
+    let actions: Set<String>
+    let attributes: Set<String>
+}
+
+enum SelectionHitClassifier {
+    private static let blockingActions: Set<String> = [
+        "AXConfirm",
+        "AXOpen",
+        "AXPick",
+        "AXPress",
+    ]
+    private static let blockingRoles: Set<String> = [
+        "AXButton",
+        "AXCheckBox",
+        "AXComboBox",
+        "AXDisclosureTriangle",
+        "AXLink",
+        "AXMenuButton",
+        "AXMenuItem",
+        "AXPopUpButton",
+        "AXRadioButton",
+        "AXRow",
+        "AXTabButton",
+        "AXTabGroup",
+        "AXToolbarButton",
+    ]
+    private static let directSelectionAttributes: Set<String> = [
+        "AXSelectedText",
+        "AXSelectedTextMarkerRange",
+        "AXSelectedTextRange",
+    ]
+
+    static func supportsTextSelection(in path: [SelectionHitEvidenceNode]) -> Bool {
+        var foundTextSelectionSemantics = false
+        for node in path {
+            if blockingRoles.contains(node.role)
+                || !node.actions.isDisjoint(with: blockingActions) {
+                return false
+            }
+            if !node.attributes.isDisjoint(with: directSelectionAttributes)
+                || (node.attributes.contains("AXNumberOfCharacters")
+                    && node.attributes.contains("AXVisibleCharacterRange")) {
+                foundTextSelectionSemantics = true
+            }
+            if node.role == "AXWindow" || node.role == "AXApplication" {
+                break
+            }
+        }
+        return foundTextSelectionSemantics
+    }
 }
 
 @MainActor
@@ -61,7 +118,8 @@ final class SelectionCaptureService: SelectionCapturing {
     }
 
     func captureCurrentSelection(
-        triggerLocation: CGPoint = NSEvent.mouseLocation
+        triggerLocation: CGPoint = NSEvent.mouseLocation,
+        fallbackPolicy: SelectionFallbackPolicy = .enabled
     ) async throws -> SelectionContext {
         guard AXIsProcessTrusted() else {
             throw SelectionCaptureError.permissionRequired
@@ -76,18 +134,30 @@ final class SelectionCaptureService: SelectionCapturing {
         }
 
         let selection: CapturedSelection
+        let captureSource: String
         do {
             selection = try capturedSelection(
                 triggerLocation: triggerLocation,
                 sourceApplication: source
             )
+            captureSource = "ax"
         } catch let error as SelectionCaptureError {
-            guard error.allowsClipboardFallback,
+            guard fallbackPolicy != .disabled,
+                  error.allowsClipboardFallback,
                   let source,
                   isFallbackAllowed(source.bundleIdentifier) else {
                 throw error
             }
 
+            if fallbackPolicy == .textHitRequired,
+               !SelectionHitClassifier.supportsTextSelection(
+                   in: hitEvidencePath(at: triggerLocation)
+               ) {
+                Self.logger.info(
+                    "Clipboard fallback suppressed: reason=pointerTargetNotTextual, bundle=\(source.bundleIdentifier ?? "unknown", privacy: .public)"
+                )
+                throw error
+            }
             Self.logger.debug(
                 "AX selection unavailable; trying clipboard fallback for bundle=\(source.bundleIdentifier ?? "unknown", privacy: .public)"
             )
@@ -96,6 +166,7 @@ final class SelectionCaptureService: SelectionCapturing {
                     sourceProcessIdentifier: source.processIdentifier
                 )
                 selection = CapturedSelection(text: text, bounds: nil)
+                captureSource = "clipboard"
             } catch is CancellationError {
                 throw CancellationError()
             } catch let fallbackError as ClipboardSelectionFallbackError {
@@ -114,6 +185,9 @@ final class SelectionCaptureService: SelectionCapturing {
         ) else {
             throw SelectionCaptureError.noSelection
         }
+        Self.logger.info(
+            "Selection capture resolved: source=\(captureSource, privacy: .public), bundle=\(source?.bundleIdentifier ?? "unknown", privacy: .public), hasBounds=\(selection.bounds != nil, privacy: .public)"
+        )
         return context
     }
 
@@ -437,6 +511,41 @@ final class SelectionCaptureService: SelectionCapturing {
         return role
     }
 
+    private func hitEvidencePath(at point: CGPoint) -> [SelectionHitEvidenceNode] {
+        guard let hitElement = element(at: point) else { return [] }
+
+        var nodes: [SelectionHitEvidenceNode] = []
+        var candidate: AXUIElement? = hitElement
+        for _ in 0..<10 {
+            guard let element = candidate else { break }
+            nodes.append(
+                SelectionHitEvidenceNode(
+                    role: role(of: element),
+                    actions: Set(actionNames(of: element)),
+                    attributes: Set(attributeNames(of: element))
+                )
+            )
+            candidate = parent(of: element)
+        }
+        return nodes
+    }
+
+    private func attributeNames(of element: AXUIElement) -> [String] {
+        var names: CFArray?
+        guard AXUIElementCopyAttributeNames(element, &names) == .success,
+              let names
+        else { return [] }
+        return names as? [String] ?? []
+    }
+
+    private func actionNames(of element: AXUIElement) -> [String] {
+        var names: CFArray?
+        guard AXUIElementCopyActionNames(element, &names) == .success,
+              let names
+        else { return [] }
+        return names as? [String] ?? []
+    }
+
     private func appKitRect(fromAccessibilityRect rect: CGRect) -> CGRect {
         let center = CGPoint(x: rect.midX, y: rect.midY)
         for screen in NSScreen.screens {
@@ -508,7 +617,7 @@ private extension ClipboardSelectionFallbackError {
         switch self {
         case .sourceUnavailable, .clipboardChanged, .restoreFailed:
             .sourceUnavailable
-        case .copyUnavailable, .timedOut, .unsafePasteboard:
+        case .copyUnavailable, .timedOut, .unsafePasteboard, .nonTextContent:
             .unsupported
         }
     }

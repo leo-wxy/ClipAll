@@ -17,6 +17,7 @@ enum OverlayStateVerification {
     static func main() async throws {
         try verifyPlacement()
         try verifyPointerSelectionGesture()
+        try verifySelectionHitClassifier()
         try verifyEmptyPinnedPersistence()
         try await verifyClipboardSelectionFallback()
         print("Overlay state verification passed")
@@ -29,6 +30,10 @@ enum OverlayStateVerification {
         try await verifyClipboardScenario("并发写入", verifyClipboardFallbackPreservesExternalChange)
         try await verifyClipboardScenario("取消恢复", verifyClipboardFallbackRestoresAfterCancellation)
         try await verifyClipboardScenario("不安全快照", verifyClipboardFallbackRejectsUnsafeSnapshot)
+        try await verifyClipboardScenario("文件对象", verifyClipboardFallbackRejectsFileObject)
+        try await verifyClipboardScenario("动态文件对象", verifyClipboardFallbackRejectsDynamicFileObject)
+        try await verifyClipboardScenario("图片对象", verifyClipboardFallbackRejectsImageObject)
+        try await verifyClipboardScenario("Chromium 真文字", verifyClipboardFallbackAcceptsChromiumText)
     }
 
     private static func verifyClipboardScenario(
@@ -178,6 +183,133 @@ enum OverlayStateVerification {
         }
     }
 
+    private static func verifyClipboardFallbackRejectsFileObject() async throws {
+        let pasteboard = VerificationPasteboard()
+        defer { pasteboard.clearContents() }
+        writePasteboard(pasteboard, text: "original")
+
+        let fallback = makeFallback(pasteboard: pasteboard) { _ in
+            let item = NSPasteboardItem()
+            item.setString("oh_modules", forType: .string)
+            item.setString("file:///tmp/oh_modules", forType: .fileURL)
+            pasteboard.clearContents()
+            _ = pasteboard.writeObjects([item])
+            return true
+        }
+
+        do {
+            let text = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+            throw OverlayStateVerificationError.failed(
+                "文件对象的纯文本表示不得触发浮窗，实际返回：\(text)"
+            )
+        } catch let error as OverlayStateVerificationError {
+            throw error
+        } catch ClipboardSelectionFallbackError.nonTextContent {
+            try expect(
+                pasteboard.string(forType: .string) == "original",
+                "拒绝文件对象后应恢复原剪贴板"
+            )
+        }
+    }
+
+    private static func verifyClipboardFallbackRejectsImageObject() async throws {
+        let pasteboard = VerificationPasteboard()
+        defer { pasteboard.clearContents() }
+        writePasteboard(pasteboard, text: "original")
+
+        let fallback = makeFallback(pasteboard: pasteboard) { _ in
+            let item = NSPasteboardItem()
+            item.setString("image label", forType: .string)
+            item.setData(Data([0x89, 0x50, 0x4E, 0x47]), forType: .png)
+            pasteboard.clearContents()
+            _ = pasteboard.writeObjects([item])
+            return true
+        }
+
+        do {
+            let text = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+            throw OverlayStateVerificationError.failed(
+                "图片对象的文字描述不得触发浮窗，实际返回：\(text)"
+            )
+        } catch let error as OverlayStateVerificationError {
+            throw error
+        } catch ClipboardSelectionFallbackError.nonTextContent {
+            try expect(
+                pasteboard.string(forType: .string) == "original",
+                "拒绝图片对象后应恢复原剪贴板"
+            )
+        }
+    }
+
+    private static func verifyClipboardFallbackRejectsDynamicFileObject() async throws {
+        let pasteboard = VerificationPasteboard()
+        defer { pasteboard.clearContents() }
+        writePasteboard(pasteboard, text: "original")
+
+        let fallback = makeFallback(pasteboard: pasteboard) { _ in
+            let item = NSPasteboardItem()
+            item.setString("oh_modules", forType: .string)
+            let observedDevEcoTypes = [
+                "dyn.ah62d4rv4gu81k3p2su11n6xmfz0gw65y",
+                "dyn.ah62d4rv4gu81uppxsbw0g4pbru10s5xtrzww425tsby0n3brq3y023px",
+                "dyn.ah62d4rv4gu8y6y4grf0gn5xbrzw1gydcr7u1e3cytf2gn",
+                "dyn.ah62d4rv4gu8yc6durvwwaznwmuuha2pxsvw0e55bsmwca7d3sbwu",
+                "dyn.ah62d4rv4gu8zkvn2nu",
+                "dyn.ah62d4rv4gu8znzcghbtzgzcwmfhes",
+            ]
+            for identifier in observedDevEcoTypes {
+                item.setData(Data([0x01]), forType: .init(identifier))
+            }
+            pasteboard.clearContents()
+            _ = pasteboard.writeObjects([item])
+            return true
+        }
+
+        do {
+            let text = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+            throw OverlayStateVerificationError.failed(
+                "动态文件对象的纯文本表示不得触发浮窗，实际返回：\(text)"
+            )
+        } catch let error as OverlayStateVerificationError {
+            throw error
+        } catch ClipboardSelectionFallbackError.nonTextContent {
+            try expect(
+                pasteboard.string(forType: .string) == "original",
+                "拒绝动态文件对象后应恢复原剪贴板"
+            )
+        }
+    }
+
+    private static func verifyClipboardFallbackAcceptsChromiumText() async throws {
+        let pasteboard = VerificationPasteboard()
+        defer { pasteboard.clearContents() }
+        writePasteboard(pasteboard, text: "original")
+
+        let fallback = makeFallback(pasteboard: pasteboard) { _ in
+            let item = NSPasteboardItem()
+            item.setString("selected text", forType: .string)
+            item.setString("<p>selected text</p>", forType: .html)
+            item.setData(
+                Data([0x01]),
+                forType: .init("org.chromium.internal.source-rfh-token")
+            )
+            item.setString(
+                "https://example.test/",
+                forType: .init("org.chromium.source-url")
+            )
+            pasteboard.clearContents()
+            _ = pasteboard.writeObjects([item])
+            return true
+        }
+
+        let text = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+        try expect(text == "selected text", "Chromium 真文字选区应继续支持复制回退")
+        try expect(
+            pasteboard.string(forType: .string) == "original",
+            "读取 Chromium 真文字后应恢复原剪贴板"
+        )
+    }
+
     private static func throwIfReached(_ message: String) -> Bool {
         assertionFailure(message)
         return false
@@ -218,34 +350,159 @@ enum OverlayStateVerification {
 
         gesture.begin(at: .zero)
         try expect(
-            !gesture.end(at: CGPoint(x: 1, y: 1), clickCount: 1),
+            gesture.end(at: CGPoint(x: 1, y: 1), clickCount: 1) == nil,
             "普通单击不得触发旧高亮选区"
         )
 
         gesture.begin(at: .zero)
         gesture.update(at: CGPoint(x: 8, y: 0))
+        let dragIntent = gesture.end(at: CGPoint(x: 10, y: 0), clickCount: 1)
         try expect(
-            gesture.end(at: CGPoint(x: 10, y: 0), clickCount: 1),
+            dragIntent == .drag,
             "达到阈值的拖选应触发取词"
         )
+        try expect(dragIntent?.fallbackPolicy == .enabled, "拖选应允许复制回退")
 
         gesture.begin(at: .zero)
+        let multiClickIntent = gesture.end(at: .zero, clickCount: 2)
         try expect(
-            gesture.end(at: .zero, clickCount: 2),
+            multiClickIntent == .multiClick,
             "双击选词应触发取词"
+        )
+        try expect(
+            multiClickIntent?.fallbackPolicy == .textHitRequired,
+            "双击 AX 无文字时必须先验证鼠标命中的是文本表面"
         )
 
         gesture.begin(at: .zero)
+        gesture.update(at: CGPoint(x: 8, y: 0))
+        let movedMultiClickIntent = gesture.end(at: CGPoint(x: 8, y: 0), clickCount: 2)
         try expect(
-            gesture.end(at: .zero, clickCount: 1, isShiftPressed: true),
+            movedMultiClickIntent == .multiClick,
+            "多击伴随轻微移动时仍应保持 multiClick 意图"
+        )
+        try expect(
+            movedMultiClickIntent?.fallbackPolicy == .textHitRequired,
+            "多击伴随轻微移动时仍应要求文本命中证据"
+        )
+
+        gesture.begin(at: .zero)
+        let shiftClickIntent = gesture.end(at: .zero, clickCount: 1, isShiftPressed: true)
+        try expect(
+            shiftClickIntent == .shiftClick,
             "Shift-click 扩展选区应触发取词"
+        )
+        try expect(
+            shiftClickIntent?.fallbackPolicy == .disabled,
+            "Shift-click AX 无文字时不得复制列表项"
         )
 
         gesture.begin(at: .zero)
         gesture.update(at: CGPoint(x: 2, y: 1))
         try expect(
-            !gesture.end(at: CGPoint(x: 3, y: 1), clickCount: 1),
+            gesture.end(at: CGPoint(x: 3, y: 1), clickCount: 1) == nil,
             "阈值内的轻微移动仍应视为普通单击"
+        )
+    }
+
+    private static func verifySelectionHitClassifier() throws {
+        let codexTextPath = [
+            SelectionHitEvidenceNode(role: "AXScrollArea", actions: [], attributes: []),
+            SelectionHitEvidenceNode(
+                role: "AXGroup",
+                actions: [],
+                attributes: [
+                    "AXNumberOfCharacters",
+                    "AXSelectedText",
+                    "AXSelectedTextRange",
+                    "AXVisibleCharacterRange",
+                ]
+            ),
+        ]
+        try expect(
+            SelectionHitClassifier.supportsTextSelection(in: codexTextPath),
+            "Codex 正文命中链应允许多击复制回退"
+        )
+
+        let vscodeTextPath = [
+            SelectionHitEvidenceNode(
+                role: "AXGroup",
+                actions: ["AXScrollToVisible", "AXShowMenu"],
+                attributes: [
+                    "AXNumberOfCharacters",
+                    "AXSelectedText",
+                    "AXSelectedTextMarkerRange",
+                    "AXSelectedTextRange",
+                    "AXVisibleCharacterRange",
+                ]
+            ),
+            SelectionHitEvidenceNode(
+                role: "AXGroup",
+                actions: ["AXScrollToVisible", "AXShowMenu"],
+                attributes: ["AXSelectedText", "AXSelectedTextRange"]
+            ),
+        ]
+        try expect(
+            SelectionHitClassifier.supportsTextSelection(in: vscodeTextPath),
+            "VSCode 正文的 AXShowMenu 不应覆盖其真实选区语义"
+        )
+
+        let ideFileTreePath = [
+            SelectionHitEvidenceNode(
+                role: "AXStaticText",
+                actions: ["AXPress", "AXShowMenu"],
+                attributes: ["AXValue", "AXVisibleCharacterRange"]
+            ),
+            SelectionHitEvidenceNode(role: "AXOutline", actions: [], attributes: ["AXValue"]),
+        ]
+        try expect(
+            !SelectionHitClassifier.supportsTextSelection(in: ideFileTreePath),
+            "带 Press/ShowMenu 动作的 IDE 文件树节点不得进入多击复制回退"
+        )
+
+        let ideTabPath = [
+            SelectionHitEvidenceNode(
+                role: "AXStaticText",
+                actions: [],
+                attributes: ["AXValue", "AXVisibleCharacterRange"]
+            ),
+            SelectionHitEvidenceNode(role: "AXWindow", actions: ["AXRaise"], attributes: []),
+        ]
+        try expect(
+            !SelectionHitClassifier.supportsTextSelection(in: ideTabPath),
+            "无选区能力的 IDE Tab 不得复制焦点编辑器里的残留选区"
+        )
+
+        let vscodeTreePath = [
+            vscodeTextPath[0],
+            vscodeTextPath[1],
+            SelectionHitEvidenceNode(
+                role: "AXRow",
+                actions: ["AXScrollToVisible", "AXShowMenu"],
+                attributes: ["AXSelectedText", "AXSelectedTextRange"]
+            ),
+            SelectionHitEvidenceNode(
+                role: "AXOutline",
+                actions: ["AXShowMenu"],
+                attributes: ["AXSelectedText", "AXSelectedTextRange"]
+            ),
+        ]
+        try expect(
+            !SelectionHitClassifier.supportsTextSelection(in: vscodeTreePath),
+            "VSCode 对象路径前层即使像文本，深层 AXRow 仍必须否决回退"
+        )
+
+        let buttonInsideTextSurface = [
+            SelectionHitEvidenceNode(
+                role: "AXButton",
+                actions: ["AXPress"],
+                attributes: ["AXValue"]
+            ),
+            codexTextPath[1],
+        ]
+        try expect(
+            !SelectionHitClassifier.supportsTextSelection(in: buttonInsideTextSurface),
+            "文本容器内的可操作控件也不得借用祖先选区进入回退"
         )
     }
 

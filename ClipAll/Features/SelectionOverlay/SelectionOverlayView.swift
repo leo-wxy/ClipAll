@@ -16,7 +16,7 @@ struct SelectionOverlayView: View {
 
             if let recommendation = store.recommendation,
                !store.isMorePresented,
-               isCompactPhase {
+               store.phase == .ready {
                 Divider().opacity(0.55)
                 recommendationRow(recommendation)
             }
@@ -101,9 +101,6 @@ struct SelectionOverlayView: View {
         case .executing:
             Divider().opacity(0.55)
             statusRow(symbolName: "sparkles", text: "正在执行…", showsProgress: true)
-        case let .message(message):
-            Divider().opacity(0.55)
-            statusRow(symbolName: "checkmark.circle.fill", text: message)
         case let .failure(_, message):
             Divider().opacity(0.55)
             statusRow(symbolName: "exclamationmark.triangle.fill", text: message, isError: true)
@@ -347,15 +344,6 @@ struct SelectionOverlayView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-    }
-
-    private var isCompactPhase: Bool {
-        switch store.phase {
-        case .ready, .message:
-            true
-        default:
-            false
-        }
     }
 
     private var cornerRadius: CGFloat {

@@ -9,6 +9,11 @@ enum CapabilityAvailability: Equatable, Sendable {
     case unavailable(reason: String)
 }
 
+enum CapabilityExecutionPresentation: Equatable, Sendable {
+    case overlay
+    case external
+}
+
 enum CapabilityError: Error, LocalizedError, Equatable, Sendable {
     case unsupportedInput(String)
     case invalidInput(String)
@@ -32,12 +37,15 @@ enum CapabilityError: Error, LocalizedError, Equatable, Sendable {
 @MainActor
 protocol CapabilityExecuting: AnyObject {
     var descriptor: CapabilityDescriptor { get }
+    var executionPresentation: CapabilityExecutionPresentation { get }
 
     func availability(for context: SelectionContext) -> CapabilityAvailability
     func execute(in context: SelectionContext) async throws -> CapabilityOutput
 }
 
 extension CapabilityExecuting {
+    var executionPresentation: CapabilityExecutionPresentation { .overlay }
+
     func availability(for context: SelectionContext) -> CapabilityAvailability {
         context.normalizedText.isEmpty ? .unavailable(reason: "当前没有可处理的文字") : .available
     }
