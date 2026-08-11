@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 import OSLog
@@ -117,6 +118,14 @@ final class AppEnvironment: ObservableObject {
                 Task { @MainActor [weak self] in self?.synchronizeSelectionMonitoring() }
             }
             .store(in: &cancellables)
+        settings.$isDockIconVisible
+            .removeDuplicates()
+            .sink { isVisible in
+                Task { @MainActor in
+                    NSApplication.shared.setActivationPolicy(isVisible ? .regular : .accessory)
+                }
+            }
+            .store(in: &cancellables)
         settings.$globalShortcut
             .removeDuplicates()
             .sink { [weak selectionMonitor] shortcut in
@@ -129,6 +138,10 @@ final class AppEnvironment: ObservableObject {
                 Task { @MainActor [weak self] in self?.synchronizeSelectionMonitoring() }
             }
             .store(in: &cancellables)
+
+        Task { @MainActor [weak self] in
+            await self?.start()
+        }
     }
 
     func start() async {
@@ -138,9 +151,8 @@ final class AppEnvironment: ObservableObject {
         }
         guard !hasStarted else { return }
 
-        // SwiftUI scene tasks are tied to view lifetime. Retain an independent
-        // startup task so rebuilding the menu-bar label cannot leave the app in
-        // a half-started state with monitoring permanently disabled.
+        // Keep one independent startup task so scene rebuilding cannot leave
+        // monitoring permanently disabled.
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
             await self.performStartup()

@@ -42,6 +42,43 @@ struct GeneralSettingsView: View {
                 }
 
                 ClipAllSectionCard(
+                    "应用入口",
+                    subtitle: "控制 Dock 与菜单栏图标，至少保留一个入口。"
+                ) {
+                    VStack(spacing: ClipAllTheme.Spacing.sm) {
+                        HStack(alignment: .center, spacing: ClipAllTheme.Spacing.md) {
+                            Label("显示菜单栏图标", systemImage: "menubar.rectangle")
+                                .fontWeight(.medium)
+                            Spacer()
+                            Toggle("", isOn: menuBarIconBinding)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                                .fixedSize()
+                                .disabled(
+                                    settings.isMenuBarIconVisible
+                                        && !settings.isDockIconVisible
+                                )
+                        }
+
+                        Divider()
+
+                        HStack(alignment: .center, spacing: ClipAllTheme.Spacing.md) {
+                            Label("显示 Dock 图标", systemImage: "dock.rectangle")
+                                .fontWeight(.medium)
+                            Spacer()
+                            Toggle("", isOn: dockIconBinding)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                                .fixedSize()
+                                .disabled(
+                                    settings.isDockIconVisible
+                                        && !settings.isMenuBarIconVisible
+                                )
+                        }
+                    }
+                }
+
+                ClipAllSectionCard(
                     "兼容取词",
                     subtitle: "辅助功能无法读取时，临时模拟复制并恢复原剪贴板。"
                 ) {
@@ -130,6 +167,20 @@ struct GeneralSettingsView: View {
         Binding(
             get: { settings.isMonitoringEnabled },
             set: { settings.isMonitoringEnabled = $0 }
+        )
+    }
+
+    private var menuBarIconBinding: Binding<Bool> {
+        Binding(
+            get: { settings.isMenuBarIconVisible },
+            set: { settings.setMenuBarIconVisible($0) }
+        )
+    }
+
+    private var dockIconBinding: Binding<Bool> {
+        Binding(
+            get: { settings.isDockIconVisible },
+            set: { settings.setDockIconVisible($0) }
         )
     }
 

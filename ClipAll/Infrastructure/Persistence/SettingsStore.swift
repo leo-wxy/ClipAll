@@ -18,6 +18,8 @@ final class SettingsStore: ObservableObject {
 
     private enum Key {
         static let monitoringEnabled = "selectionMonitoringEnabled"
+        static let menuBarIconVisible = "menuBarIconVisible"
+        static let dockIconVisible = "dockIconVisible"
         static let selectionFallbackEnabled = "selectionFallbackEnabled"
         static let selectionFallbackExcludedBundleIdentifiers =
             "selectionFallbackExcludedBundleIdentifiers.v1"
@@ -33,6 +35,14 @@ final class SettingsStore: ObservableObject {
 
     @Published var isMonitoringEnabled: Bool {
         didSet { defaults.set(isMonitoringEnabled, forKey: Key.monitoringEnabled) }
+    }
+
+    @Published private(set) var isMenuBarIconVisible: Bool {
+        didSet { defaults.set(isMenuBarIconVisible, forKey: Key.menuBarIconVisible) }
+    }
+
+    @Published private(set) var isDockIconVisible: Bool {
+        didSet { defaults.set(isDockIconVisible, forKey: Key.dockIconVisible) }
     }
 
     @Published var isSelectionFallbackEnabled: Bool {
@@ -81,6 +91,19 @@ final class SettingsStore: ObservableObject {
             isMonitoringEnabled = defaults.bool(forKey: Key.monitoringEnabled)
         }
 
+        let storedMenuBarVisibility = defaults.object(forKey: Key.menuBarIconVisible) == nil
+            || defaults.bool(forKey: Key.menuBarIconVisible)
+        let storedDockVisibility = defaults.object(forKey: Key.dockIconVisible) == nil
+            || defaults.bool(forKey: Key.dockIconVisible)
+        if !storedMenuBarVisibility, !storedDockVisibility {
+            isMenuBarIconVisible = true
+            isDockIconVisible = false
+            defaults.set(true, forKey: Key.menuBarIconVisible)
+        } else {
+            isMenuBarIconVisible = storedMenuBarVisibility
+            isDockIconVisible = storedDockVisibility
+        }
+
         if defaults.object(forKey: Key.selectionFallbackEnabled) == nil {
             isSelectionFallbackEnabled = true
         } else {
@@ -117,6 +140,20 @@ final class SettingsStore: ObservableObject {
         pluginEnabledStates = Dictionary(
             uniqueKeysWithValues: storedPluginStates.map { (PluginID($0.key), $0.value) }
         )
+    }
+
+    @discardableResult
+    func setMenuBarIconVisible(_ isVisible: Bool) -> Bool {
+        guard isVisible || isDockIconVisible else { return false }
+        isMenuBarIconVisible = isVisible
+        return true
+    }
+
+    @discardableResult
+    func setDockIconVisible(_ isVisible: Bool) -> Bool {
+        guard isVisible || isMenuBarIconVisible else { return false }
+        isDockIconVisible = isVisible
+        return true
     }
 
     func setSelectionFallbackExcluded(_ bundleIdentifier: String, isExcluded: Bool) {

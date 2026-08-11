@@ -19,6 +19,7 @@ enum OverlayStateVerification {
         try verifyPointerSelectionGesture()
         try verifySelectionHitClassifier()
         try verifyEmptyPinnedPersistence()
+        try verifyApplicationEntryVisibilityPersistence()
         try await verifyClipboardSelectionFallback()
         print("Overlay state verification passed")
     }
@@ -601,6 +602,40 @@ enum OverlayStateVerification {
         try expect(
             !fallbackReloaded.allowsSelectionFallback(for: "com.example.Editor"),
             "排除应用不应进入复制回退"
+        )
+    }
+
+    private static func verifyApplicationEntryVisibilityPersistence() throws {
+        let suite = "ClipAll.EntryVisibilityVerification.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            throw OverlayStateVerificationError.failed("无法创建入口可见性 UserDefaults")
+        }
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let initial = SettingsStore(defaults: defaults)
+        try expect(initial.isMenuBarIconVisible, "菜单栏图标首次启动应默认显示")
+        try expect(initial.isDockIconVisible, "Dock 图标首次启动应默认显示")
+
+        try expect(initial.setDockIconVisible(false), "两个入口均显示时应允许隐藏 Dock")
+        try expect(
+            !initial.setMenuBarIconVisible(false),
+            "只剩菜单栏入口时不得继续隐藏菜单栏"
+        )
+        try expect(initial.isMenuBarIconVisible, "拒绝隐藏最后入口后状态应保持不变")
+
+        try expect(initial.setDockIconVisible(true), "应允许恢复 Dock 图标")
+        try expect(initial.setMenuBarIconVisible(false), "Dock 显示时应允许隐藏菜单栏")
+
+        let reloaded = SettingsStore(defaults: defaults)
+        try expect(!reloaded.isMenuBarIconVisible, "菜单栏图标设置应持久化")
+        try expect(reloaded.isDockIconVisible, "Dock 图标设置应持久化")
+
+        defaults.set(false, forKey: "menuBarIconVisible")
+        defaults.set(false, forKey: "dockIconVisible")
+        let repaired = SettingsStore(defaults: defaults)
+        try expect(
+            repaired.isMenuBarIconVisible || repaired.isDockIconVisible,
+            "损坏设置也必须自动恢复至少一个入口"
         )
     }
 

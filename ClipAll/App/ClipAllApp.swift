@@ -7,11 +7,10 @@ struct ClipAllApp: App {
     @StateObject private var environment = AppEnvironment()
 
     var body: some Scene {
-        MenuBarExtra {
+        MenuBarExtra(isInserted: menuBarIconBinding) {
             MenuBarContent(environment: environment)
         } label: {
             MenuBarStatusIcon(settings: environment.settings)
-                .task { await environment.start() }
         }
 
         Window("能力中心", id: "capability-center") {
@@ -26,6 +25,13 @@ struct ClipAllApp: App {
         .defaultSize(width: 1_140, height: 720)
         .windowResizability(.contentMinSize)
         .windowStyle(.hiddenTitleBar)
+    }
+
+    private var menuBarIconBinding: Binding<Bool> {
+        Binding(
+            get: { environment.settings.isMenuBarIconVisible },
+            set: { environment.settings.setMenuBarIconVisible($0) }
+        )
     }
 }
 
