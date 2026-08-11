@@ -71,7 +71,9 @@ enum SelectionHitClassifier {
         "AXSelectedTextRange",
     ]
 
-    static func supportsTextSelection(in path: [SelectionHitEvidenceNode]) -> Bool {
+    static func allowsClipboardFallback(in path: [SelectionHitEvidenceNode]) -> Bool {
+        guard !path.isEmpty else { return true }
+
         var foundTextSelectionSemantics = false
         for node in path {
             if blockingRoles.contains(node.role)
@@ -149,8 +151,8 @@ final class SelectionCaptureService: SelectionCapturing {
                 throw error
             }
 
-            if fallbackPolicy == .textHitRequired,
-               !SelectionHitClassifier.supportsTextSelection(
+            if fallbackPolicy == .rejectKnownNonText,
+               !SelectionHitClassifier.allowsClipboardFallback(
                    in: hitEvidencePath(at: triggerLocation)
                ) {
                 Self.logger.info(

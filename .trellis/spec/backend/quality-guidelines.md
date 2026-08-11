@@ -87,3 +87,114 @@ response on stdout. `PluginRuntimeLimits` owns protocol and byte limits.
 #### Correct
 
 `process.standardInput = Pipe()`
+
+## Scenario: Cross-App Pointer Selection Fallback
+
+### 1. Scope / Trigger
+
+Apply this contract when changing pointer gesture detection, Accessibility
+selection capture, hit-element classification, or the automatic clipboard
+fallback. The current owners are:
+
+- `ClipAll/Infrastructure/Accessibility/PointerSelectionGesture.swift`
+- `ClipAll/Infrastructure/Accessibility/SelectionCaptureService.swift`
+- `ClipAll/Infrastructure/Accessibility/ClipboardSelectionFallback.swift`
+
+### 2. Signatures
+
+```swift
+SelectionCaptureService.captureCurrentSelection(
+    triggerLocation: CGPoint,
+    fallbackPolicy: SelectionFallbackPolicy
+) async throws -> SelectionContext
+
+SelectionHitClassifier.allowsClipboardFallback(
+    in path: [SelectionHitEvidenceNode]
+) -> Bool
+```
+
+`PointerSelectionIntent.fallbackPolicy` owns the gesture policy:
+
+- drag -> `enabled`
+- multi-click -> `rejectKnownNonText`
+- shift-click -> `disabled`
+
+### 3. Contracts
+
+- Try bounded AX selection capture before clipboard fallback. AX success never
+  sends `Command-C`.
+- A normal single click has no pointer selection intent and never captures.
+- For multi-click, an empty hit path means AX cannot classify the surface; it
+  may continue to the existing constrained clipboard fallback.
+- Any blocking role/action rejects fallback. Scan the complete bounded path so
+  a text-like child cannot hide an ancestor `AXRow`, Tab, button, or menu item.
+- A non-empty path with no selection semantics rejects fallback.
+- A path with selection attributes, or number-of-characters plus visible-range
+  semantics, allows fallback when no blocking node exists.
+- Do not add bundle-specific allowlists or fixed AX settle delays for an App
+  whose hit path is empty.
+- Selected text and pasteboard contents remain memory-only and never enter
+  logs. Logging may include trigger, policy, result source, error enum, and
+  bundle identifier.
+- AX-visible secure text fields reject capture. For an AX-invisible surface,
+  fallback can only consume pure text that the source App supplies in response
+  to the explicit user `Command-C`; users retain global and per-App controls.
+
+### 4. Validation & Error Matrix
+
+| Trigger / evidence | Required behavior |
+| --- | --- |
+| Normal single click | Do not capture or send copy |
+| AX selection succeeds | Publish AX selection; do not send copy |
+| Drag + fallback-eligible AX failure | Try constrained clipboard fallback |
+| Multi-click + empty AX hit path | Try constrained clipboard fallback |
+| Multi-click + text path | Try constrained clipboard fallback |
+| Multi-click + blocking role/action | Suppress before sending copy |
+| Multi-click + non-empty path without selection semantics | Suppress before sending copy |
+| Shift-click + AX failure | Suppress clipboard fallback |
+| Clipboard returns empty, times out, or contains a non-text object | Restore safely and publish nothing |
+| Clipboard changes concurrently | Preserve the newer external content |
+
+### 5. Good / Base / Bad Cases
+
+- Good: POPO exposes no focused or hit AX element; explicit multi-click enters
+  the existing clipboard fallback and publishes its pure-text result.
+- Base: VSCode / VSCodium text surfaces expose selection semantics and continue
+  to work.
+- Good: IDE file-tree rows and Tabs expose blocking or non-text evidence and
+  are rejected before fallback.
+- Bad: treat an empty AX path as proof that the pointer target is non-text.
+- Bad: allow any non-empty hit path without checking its complete ancestry.
+- Bad: special-case a bundle identifier or add a fixed delay instead of using
+  observable AX evidence.
+
+### 6. Tests Required
+
+- `Scripts/verify-overlay-state.sh` must assert:
+  - empty hit paths allow constrained fallback;
+  - known text surfaces allow fallback;
+  - file-tree, Tab, button, and non-empty non-text paths reject fallback;
+  - drag, multi-click, shift-click, and normal-click policies remain stable;
+  - file/image/dynamic-object clipboard payloads remain rejected and snapshots
+    retain their existing restoration and concurrency behavior.
+- `Scripts/verify-all.sh` and `swift build --target ClipAll` must pass.
+- Before commit, install through `Scripts/install-local-app.sh` and manually
+  verify one AX-invisible text App, one Chromium editor, one IDE file tree / Tab,
+  and one input field.
+- Static search must find no temporary selection-text logging or diagnostic
+  probe in product code.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```swift
+// Empty means AX supplied no evidence, not that the surface is non-text.
+guard !path.isEmpty else { return false }
+```
+
+#### Correct
+
+```swift
+guard !path.isEmpty else { return true }
+```

@@ -370,8 +370,8 @@ enum OverlayStateVerification {
             "双击选词应触发取词"
         )
         try expect(
-            multiClickIntent?.fallbackPolicy == .textHitRequired,
-            "双击 AX 无文字时必须先验证鼠标命中的是文本表面"
+            multiClickIntent?.fallbackPolicy == .rejectKnownNonText,
+            "双击 AX 无文字时应拒绝已知非文字命中"
         )
 
         gesture.begin(at: .zero)
@@ -382,8 +382,8 @@ enum OverlayStateVerification {
             "多击伴随轻微移动时仍应保持 multiClick 意图"
         )
         try expect(
-            movedMultiClickIntent?.fallbackPolicy == .textHitRequired,
-            "多击伴随轻微移动时仍应要求文本命中证据"
+            movedMultiClickIntent?.fallbackPolicy == .rejectKnownNonText,
+            "多击伴随轻微移动时仍应拒绝已知非文字命中"
         )
 
         gesture.begin(at: .zero)
@@ -406,6 +406,11 @@ enum OverlayStateVerification {
     }
 
     private static func verifySelectionHitClassifier() throws {
+        try expect(
+            SelectionHitClassifier.allowsClipboardFallback(in: []),
+            "AX 完全不提供鼠标命中链时应允许受约束的复制回退"
+        )
+
         let codexTextPath = [
             SelectionHitEvidenceNode(role: "AXScrollArea", actions: [], attributes: []),
             SelectionHitEvidenceNode(
@@ -420,7 +425,7 @@ enum OverlayStateVerification {
             ),
         ]
         try expect(
-            SelectionHitClassifier.supportsTextSelection(in: codexTextPath),
+            SelectionHitClassifier.allowsClipboardFallback(in: codexTextPath),
             "Codex 正文命中链应允许多击复制回退"
         )
 
@@ -443,7 +448,7 @@ enum OverlayStateVerification {
             ),
         ]
         try expect(
-            SelectionHitClassifier.supportsTextSelection(in: vscodeTextPath),
+            SelectionHitClassifier.allowsClipboardFallback(in: vscodeTextPath),
             "VSCode 正文的 AXShowMenu 不应覆盖其真实选区语义"
         )
 
@@ -456,7 +461,7 @@ enum OverlayStateVerification {
             SelectionHitEvidenceNode(role: "AXOutline", actions: [], attributes: ["AXValue"]),
         ]
         try expect(
-            !SelectionHitClassifier.supportsTextSelection(in: ideFileTreePath),
+            !SelectionHitClassifier.allowsClipboardFallback(in: ideFileTreePath),
             "带 Press/ShowMenu 动作的 IDE 文件树节点不得进入多击复制回退"
         )
 
@@ -469,7 +474,7 @@ enum OverlayStateVerification {
             SelectionHitEvidenceNode(role: "AXWindow", actions: ["AXRaise"], attributes: []),
         ]
         try expect(
-            !SelectionHitClassifier.supportsTextSelection(in: ideTabPath),
+            !SelectionHitClassifier.allowsClipboardFallback(in: ideTabPath),
             "无选区能力的 IDE Tab 不得复制焦点编辑器里的残留选区"
         )
 
@@ -488,7 +493,7 @@ enum OverlayStateVerification {
             ),
         ]
         try expect(
-            !SelectionHitClassifier.supportsTextSelection(in: vscodeTreePath),
+            !SelectionHitClassifier.allowsClipboardFallback(in: vscodeTreePath),
             "VSCode 对象路径前层即使像文本，深层 AXRow 仍必须否决回退"
         )
 
@@ -501,7 +506,7 @@ enum OverlayStateVerification {
             codexTextPath[1],
         ]
         try expect(
-            !SelectionHitClassifier.supportsTextSelection(in: buttonInsideTextSurface),
+            !SelectionHitClassifier.allowsClipboardFallback(in: buttonInsideTextSurface),
             "文本容器内的可操作控件也不得借用祖先选区进入回退"
         )
     }
