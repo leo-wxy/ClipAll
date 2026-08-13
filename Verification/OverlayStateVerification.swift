@@ -173,15 +173,13 @@ enum OverlayStateVerification {
         writePasteboard(pasteboard, text: "original")
 
         let fallback = makeFallback(
-            pasteboard: pasteboard,
-            stabilityDelay: .milliseconds(30)
+            pasteboard: pasteboard
         ) { _ in
             writePasteboard(pasteboard, text: "selected")
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(5))
-                writePasteboard(pasteboard, text: "external")
-            }
             return true
+        }
+        pasteboard.afterNextStringRead = {
+            writePasteboard(pasteboard, text: "external")
         }
         do {
             _ = try await fallback.captureSelection(sourceProcessIdentifier: 42)
@@ -952,6 +950,7 @@ private final class VerificationSelectionCapture: SelectionCapturing {
 private final class VerificationPasteboard: ClipboardPasteboard {
     private(set) var changeCount = 0
     private(set) var pasteboardItems: [NSPasteboardItem]? = []
+    var afterNextStringRead: (() -> Void)?
 
     @discardableResult
     func clearContents() -> Int {
@@ -961,7 +960,11 @@ private final class VerificationPasteboard: ClipboardPasteboard {
     }
 
     func string(forType dataType: NSPasteboard.PasteboardType) -> String? {
-        pasteboardItems?.lazy.compactMap { $0.string(forType: dataType) }.first
+        let value = pasteboardItems?.lazy.compactMap { $0.string(forType: dataType) }.first
+        let action = afterNextStringRead
+        afterNextStringRead = nil
+        action?()
+        return value
     }
 
     func data(forType dataType: NSPasteboard.PasteboardType) -> Data? {
