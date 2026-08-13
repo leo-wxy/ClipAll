@@ -248,7 +248,6 @@ final class ClipAllHoverTrackingView: NSView {
         didSet { updateHighlight() }
     }
 
-    private var trackingAreaReference: NSTrackingArea?
     private var isHighlighted = false
 
     init(cornerRadius: CGFloat, highlightOpacity: CGFloat) {
@@ -257,17 +256,6 @@ final class ClipAllHoverTrackingView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.cornerRadius = cornerRadius
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-    override func updateTrackingAreas() {
-        if let trackingAreaReference {
-            removeTrackingArea(trackingAreaReference)
-        }
         let trackingArea = NSTrackingArea(
             rect: .zero,
             options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
@@ -275,9 +263,12 @@ final class ClipAllHoverTrackingView: NSView {
             userInfo: nil
         )
         addTrackingArea(trackingArea)
-        trackingAreaReference = trackingArea
-        super.updateTrackingAreas()
     }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { nil }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     override func mouseEntered(with event: NSEvent) {
         isHighlighted = true
