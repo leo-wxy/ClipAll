@@ -8,6 +8,24 @@
 
 <p align="center">macOS 15+ · Apple Silicon · 当前版本 0.0.9</p>
 
+## 界面预览
+
+<p align="center">
+  <img src="Docs/Images/selection-overlay.png" width="600" alt="选中文字后的 ClipAll 浮窗">
+</p>
+<p align="center"><sub>选中文字后，就地复制、粘贴、搜索、翻译或展开更多能力。</sub></p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="Docs/Images/selection-settings.jpg" alt="ClipAll 取词设置与应用规则"></td>
+    <td width="50%"><img src="Docs/Images/plugin-management.jpg" alt="ClipAll 插件管理与翻译配置"></td>
+  </tr>
+  <tr>
+    <td align="center">按触发方式和来源 App 控制自动浮窗</td>
+    <td align="center">集中管理内置能力、外置插件与配置</td>
+  </tr>
+</table>
+
 ## 功能
 
 - 拖选、双击或 Shift-click 后显示悬浮操作栏，普通单击和普通输入不会触发。
