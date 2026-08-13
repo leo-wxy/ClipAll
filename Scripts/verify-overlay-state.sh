@@ -8,6 +8,7 @@ verification_swiftc \
   "$PROJECT_ROOT/ClipAll/Infrastructure/Accessibility/ClipboardSelectionFallback.swift" \
   "$PROJECT_ROOT/ClipAll/Infrastructure/Accessibility/PointerSelectionGesture.swift" \
   "$PROJECT_ROOT/ClipAll/Infrastructure/Accessibility/SelectionCaptureService.swift" \
+  "$PROJECT_ROOT/ClipAll/Infrastructure/Accessibility/SelectionMonitor.swift" \
   "$PROJECT_ROOT/ClipAll/Infrastructure/Persistence/SettingsStore.swift" \
   "$PROJECT_ROOT/ClipAll/Features/SelectionOverlay/OverlayPlacement.swift" \
   "$PROJECT_ROOT/Verification/OverlayStateVerification.swift" \
@@ -31,6 +32,7 @@ verification_swiftc \
   "$PROJECT_ROOT/ClipAll/Capabilities/CapabilityRouter.swift" \
   "$PROJECT_ROOT/ClipAll/Capabilities/CapabilityDiscoveryModel.swift" \
   "$PROJECT_ROOT/ClipAll/BuiltInPlugins/Translation/TranslationPlugin.swift" \
+  "$PROJECT_ROOT/ClipAll/Infrastructure/Accessibility/PointerSelectionGesture.swift" \
   "$PROJECT_ROOT/ClipAll/Infrastructure/Persistence/SettingsStore.swift" \
   "$PROJECT_ROOT/ClipAll/Infrastructure/Persistence/PluginConfigurationStore.swift" \
   "$PROJECT_ROOT/ClipAll/Infrastructure/Security/PluginSecretStore.swift" \

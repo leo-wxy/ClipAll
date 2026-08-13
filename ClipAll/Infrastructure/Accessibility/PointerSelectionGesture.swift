@@ -6,6 +6,32 @@ enum SelectionFallbackPolicy: String, Equatable, Sendable {
     case enabled
 }
 
+enum SelectionAutomaticDisplayPolicy: String, CaseIterable, Codable, Hashable, Sendable {
+    case followGlobal
+    case dragOnly
+    case disabled
+
+    func allows(
+        _ intent: PointerSelectionIntent,
+        isDragEnabled: Bool,
+        isMultiClickEnabled: Bool
+    ) -> Bool {
+        switch self {
+        case .followGlobal:
+            switch intent {
+            case .drag, .shiftClick:
+                isDragEnabled
+            case .multiClick:
+                isMultiClickEnabled
+            }
+        case .dragOnly:
+            intent != .multiClick
+        case .disabled:
+            false
+        }
+    }
+}
+
 enum PointerSelectionIntent: String, Equatable, Sendable {
     case drag
     case multiClick

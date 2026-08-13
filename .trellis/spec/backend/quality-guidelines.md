@@ -97,8 +97,10 @@ selection capture, hit-element classification, or the automatic clipboard
 fallback. The current owners are:
 
 - `ClipAll/Infrastructure/Accessibility/PointerSelectionGesture.swift`
+- `ClipAll/Infrastructure/Accessibility/SelectionMonitor.swift`
 - `ClipAll/Infrastructure/Accessibility/SelectionCaptureService.swift`
 - `ClipAll/Infrastructure/Accessibility/ClipboardSelectionFallback.swift`
+- `ClipAll/Infrastructure/Persistence/SettingsStore.swift`
 
 ### 2. Signatures
 
@@ -111,6 +113,18 @@ SelectionCaptureService.captureCurrentSelection(
 SelectionHitClassifier.allowsClipboardFallback(
     in path: [SelectionHitEvidenceNode]
 ) -> Bool
+
+SettingsStore.allowsAutomaticDisplay(
+    for intent: PointerSelectionIntent,
+    bundleIdentifier: String?
+) -> Bool
+
+SelectionMonitor.capturePointerSelection(
+    _ intent: PointerSelectionIntent,
+    sourceBundleIdentifier: String?,
+    after delay: Duration,
+    requiresRunning: Bool
+)
 ```
 
 `PointerSelectionIntent.fallbackPolicy` owns the gesture policy:
@@ -124,6 +138,12 @@ SelectionHitClassifier.allowsClipboardFallback(
 - Try bounded AX selection capture before clipboard fallback. AX success never
   sends `Command-C`.
 - A normal single click has no pointer selection intent and never captures.
+- Global drag and multi-click switches default to enabled. Per-App automatic
+  display policy is `followGlobal`, `dragOnly`, or `disabled`; it affects pointer
+  capture only. Registered hotkey and menu capture bypass the pointer policy.
+- Apply the automatic display policy before AX or clipboard work. Re-check the
+  frontmost bundle after the settle delay and after capture; if it differs from
+  the mouse-up source, invalidate without publishing the new App's selection.
 - For multi-click, an empty hit path means AX cannot classify the surface; it
   may continue to the existing constrained clipboard fallback.
 - Any blocking role/action rejects fallback. Scan the complete bounded path so
@@ -136,6 +156,10 @@ SelectionHitClassifier.allowsClipboardFallback(
 - Selected text and pasteboard contents remain memory-only and never enter
   logs. Logging may include trigger, policy, result source, error enum, and
   bundle identifier.
+- Snapshot a real `NSPasteboard` through the native Pasteboard Manager API so
+  private flavors are preserved as bytes plus flavor flags. Restore the original
+  item ordering and flavors while the transaction still owns the generation;
+  never stage the snapshot through a file.
 - AX-visible secure text fields reject capture. For an AX-invisible surface,
   fallback can only consume pure text that the source App supplies in response
   to the explicit user `Command-C`; users retain global and per-App controls.
@@ -145,6 +169,10 @@ SelectionHitClassifier.allowsClipboardFallback(
 | Trigger / evidence | Required behavior |
 | --- | --- |
 | Normal single click | Do not capture or send copy |
+| Global pointer trigger disabled | Invalidate before AX or clipboard work |
+| App policy is `dragOnly` | Allow drag/Shift-click; reject multi-click |
+| App policy is `disabled` | Reject every pointer trigger; allow hotkey/menu capture |
+| Frontmost App changes during settle/capture | Invalidate; publish nothing from the new App |
 | AX selection succeeds | Publish AX selection; do not send copy |
 | Drag + fallback-eligible AX failure | Try constrained clipboard fallback |
 | Multi-click + empty AX hit path | Try constrained clipboard fallback |
@@ -154,6 +182,7 @@ SelectionHitClassifier.allowsClipboardFallback(
 | Shift-click + AX failure | Suppress clipboard fallback |
 | Clipboard returns empty, times out, or contains a non-text object | Restore safely and publish nothing |
 | Clipboard changes concurrently | Preserve the newer external content |
+| Existing clipboard contains an AppKit-unreadable private flavor | Snapshot and restore its native bytes and flags |
 
 ### 5. Good / Base / Bad Cases
 
@@ -163,6 +192,10 @@ SelectionHitClassifier.allowsClipboardFallback(
   to work.
 - Good: IDE file-tree rows and Tabs expose blocking or non-text evidence and
   are rejected before fallback.
+- Good: a disabled App is rejected before `SelectionCapturing` is called, while
+  the same App remains available through the explicit hotkey or menu command.
+- Good: a Qt private image-path flavor survives a successful text fallback
+  byte-for-byte without the selected text touching disk.
 - Bad: treat an empty AX path as proof that the pointer target is non-text.
 - Bad: allow any non-empty hit path without checking its complete ancestry.
 - Bad: special-case a bundle identifier or add a fixed delay instead of using
@@ -175,6 +208,11 @@ SelectionHitClassifier.allowsClipboardFallback(
   - known text surfaces allow fallback;
   - file-tree, Tab, button, and non-empty non-text paths reject fallback;
   - drag, multi-click, shift-click, and normal-click policies remain stable;
+  - global and per-App policy defaults, persistence, deletion, and invalid-value
+    sanitization remain stable;
+  - policy rejection invokes no capture, source switching invalidates, and
+    hotkey/menu capture bypasses the pointer policy;
+  - a private native flavor is restored byte-for-byte after successful fallback;
   - file/image/dynamic-object clipboard payloads remain rejected and snapshots
     retain their existing restoration and concurrency behavior.
 - `Scripts/verify-all.sh` and `swift build --target ClipAll` must pass.

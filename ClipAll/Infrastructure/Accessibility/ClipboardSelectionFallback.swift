@@ -32,8 +32,19 @@ final class ClipboardSelectionFallback {
     typealias CopyAction = @MainActor (pid_t) -> Bool
     typealias SourceCheck = @MainActor (pid_t) -> Bool
 
-    private struct Snapshot {
-        let items: [NSPasteboardItem]
+    private enum Snapshot {
+        case native([NativeItem])
+        case appKit([NSPasteboardItem])
+    }
+
+    private struct NativeItem {
+        let flavors: [NativeFlavor]
+    }
+
+    private struct NativeFlavor {
+        let type: String
+        let data: Data
+        let flags: PasteboardFlavorFlags
     }
 
     private static let maximumItems = 16
@@ -205,6 +216,10 @@ final class ClipboardSelectionFallback {
     }
 
     private func snapshotPasteboard() throws -> Snapshot {
+        if let nativePasteboard = pasteboard as? NSPasteboard {
+            return .native(try snapshotNativePasteboard(nativePasteboard))
+        }
+
         let sourceItems = pasteboard.pasteboardItems ?? []
         guard sourceItems.count <= Self.maximumItems else {
             throw ClipboardSelectionFallbackError.unsafePasteboard
@@ -239,7 +254,92 @@ final class ClipboardSelectionFallback {
             copiedItems.append(copiedItem)
         }
 
-        return Snapshot(items: copiedItems)
+        return .appKit(copiedItems)
+    }
+
+    private func snapshotNativePasteboard(_ source: NSPasteboard) throws -> [NativeItem] {
+        guard let nativePasteboard = Self.nativePasteboard(named: source.name) else {
+            throw ClipboardSelectionFallbackError.unsafePasteboard
+        }
+        _ = PasteboardSynchronize(nativePasteboard)
+
+        var itemCount = 0
+        guard PasteboardGetItemCount(nativePasteboard, &itemCount) == noErr,
+              itemCount <= Self.maximumItems else {
+            throw ClipboardSelectionFallbackError.unsafePasteboard
+        }
+
+        var totalTypes = 0
+        var totalBytes = 0
+        var items: [NativeItem] = []
+        items.reserveCapacity(itemCount)
+
+        for index in 0..<itemCount {
+            var itemIdentifier: PasteboardItemID?
+            guard PasteboardGetItemIdentifier(
+                nativePasteboard,
+                CFIndex(index + 1),
+                &itemIdentifier
+            ) == noErr,
+                let itemIdentifier else {
+                throw ClipboardSelectionFallbackError.unsafePasteboard
+            }
+
+            var flavorArray: CFArray?
+            guard PasteboardCopyItemFlavors(
+                nativePasteboard,
+                itemIdentifier,
+                &flavorArray
+            ) == noErr,
+                let flavorTypes = flavorArray as? [String] else {
+                throw ClipboardSelectionFallbackError.unsafePasteboard
+            }
+
+            var flavors: [NativeFlavor] = []
+            for flavorType in flavorTypes {
+                var flags = PasteboardFlavorFlags()
+                guard PasteboardGetItemFlavorFlags(
+                    nativePasteboard,
+                    itemIdentifier,
+                    flavorType as CFString,
+                    &flags
+                ) == noErr else {
+                    throw ClipboardSelectionFallbackError.unsafePasteboard
+                }
+                guard !flags.contains(.systemTranslated) else { continue }
+
+                totalTypes += 1
+                guard totalTypes <= Self.maximumTypes else {
+                    throw ClipboardSelectionFallbackError.unsafePasteboard
+                }
+
+                var flavorData: CFData?
+                guard PasteboardCopyItemFlavorData(
+                    nativePasteboard,
+                    itemIdentifier,
+                    flavorType as CFString,
+                    &flavorData
+                ) == noErr,
+                    let flavorData else {
+                    throw ClipboardSelectionFallbackError.unsafePasteboard
+                }
+                let data = flavorData as Data
+                totalBytes += data.count
+                guard totalBytes <= Self.maximumBytes else {
+                    throw ClipboardSelectionFallbackError.unsafePasteboard
+                }
+
+                flags.remove([.systemTranslated, .promised])
+                flavors.append(NativeFlavor(type: flavorType, data: data, flags: flags))
+            }
+
+            guard !flavors.isEmpty else {
+                throw ClipboardSelectionFallbackError.unsafePasteboard
+            }
+            items.append(NativeItem(flavors: flavors))
+        }
+
+        return items
     }
 
     private func restore(_ snapshot: Snapshot, expectedChangeCount: Int) throws {
@@ -247,11 +347,43 @@ final class ClipboardSelectionFallback {
             throw ClipboardSelectionFallbackError.clipboardChanged
         }
 
-        pasteboard.clearContents()
-        guard snapshot.items.isEmpty
-                || pasteboard.writeObjects(snapshot.items.map { $0 as NSPasteboardWriting }) else {
-            throw ClipboardSelectionFallbackError.restoreFailed
+        switch snapshot {
+        case let .native(items):
+            guard let destination = pasteboard as? NSPasteboard,
+                  let nativePasteboard = Self.nativePasteboard(named: destination.name),
+                  PasteboardClear(nativePasteboard) == noErr else {
+                throw ClipboardSelectionFallbackError.restoreFailed
+            }
+
+            for (index, item) in items.enumerated() {
+                guard let itemIdentifier = UnsafeMutableRawPointer(bitPattern: index + 1) else {
+                    throw ClipboardSelectionFallbackError.restoreFailed
+                }
+                for flavor in item.flavors {
+                    guard PasteboardPutItemFlavor(
+                        nativePasteboard,
+                        itemIdentifier,
+                        flavor.type as CFString,
+                        flavor.data as CFData,
+                        flavor.flags
+                    ) == noErr else {
+                        throw ClipboardSelectionFallbackError.restoreFailed
+                    }
+                }
+            }
+        case let .appKit(items):
+            pasteboard.clearContents()
+            guard items.isEmpty
+                    || pasteboard.writeObjects(items.map { $0 as NSPasteboardWriting }) else {
+                throw ClipboardSelectionFallbackError.restoreFailed
+            }
         }
+    }
+
+    private static func nativePasteboard(named name: NSPasteboard.Name) -> Pasteboard? {
+        var pasteboard: Pasteboard?
+        guard PasteboardCreate(name.rawValue as CFString, &pasteboard) == noErr else { return nil }
+        return pasteboard
     }
 
     private static func postCopyShortcut(to processIdentifier: pid_t) -> Bool {

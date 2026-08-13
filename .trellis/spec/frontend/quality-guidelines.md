@@ -126,7 +126,10 @@ if executor.executionPresentation == .external {
 - `PointerSelectionGesture.end(at:clickCount:isShiftPressed:) -> PointerSelectionIntent?`
   returns `.drag`, `.multiClick`, `.shiftClick`, or `nil` and always resets state.
 - `PointerSelectionIntent.fallbackPolicy` maps `.drag` to `.enabled`,
-  `.multiClick` to `.textHitRequired`, and `.shiftClick` to `.disabled`.
+  `.multiClick` to `.rejectKnownNonText`, and `.shiftClick` to `.disabled`.
+- `SelectionAutomaticDisplayPolicy` is `followGlobal`, `dragOnly`, or `disabled`.
+- `SettingsStore.allowsAutomaticDisplay(for:bundleIdentifier:)` is the single
+  global/per-App pointer-policy decision.
 - The async `SelectionCapturing.captureCurrentSelection(triggerLocation:fallbackPolicy:)`
   is the single capture entry used by pointer, registered hotkey, and menu commands.
 
@@ -135,6 +138,17 @@ if executor.executionPresentation == .external {
 - Pointer auto-capture runs only after a drag at least four points, a mouse-up
   with `clickCount >= 2`, or Shift-click. A plain click never reads a retained
   old selection.
+- Settings opens on the dedicated `取词` section. It owns the monitoring master,
+  drag and multi-click switches, per-App policy, fixed-filter explanation, and
+  compatibility fallback. The floating panel and menu bar do not edit these
+  preferences.
+- New global trigger switches default to enabled. An added App defaults to
+  `followGlobal`; deleting its row removes both automatic-display policy and
+  compatibility-fallback exclusion. Legacy fallback exclusions remain
+  fallback-only and appear in the same App list.
+- Gate pointer capture before AX/clipboard work, then re-check the mouse-up
+  source bundle after the settle delay and after capture. Hotkey and menu
+  capture bypass the pointer policy.
 - Keyboard selection is explicit: the Carbon-registered global shortcut may
   capture, but ordinary `NSEvent.keyDown` must never be monitored or replayed.
 - Resolve AX candidates in this order: system-wide focus, frontmost application
@@ -152,6 +166,8 @@ if executor.executionPresentation == .external {
 - Clipboard fallback snapshots all readable pasteboard items before clearing,
   waits asynchronously for a new change count, and restores only while it still
   owns the current generation. A later external write must never be overwritten.
+- A real `NSPasteboard` snapshot uses native flavor bytes and flags so private
+  Qt/AppKit-unreadable types can be restored without writing them to disk.
 - Before reading a string representation, clipboard fallback rejects a new item
   containing file URLs, file lists, Finder node references, promised-file,
   image, audio/video, PDF, archive, vCard, or font types, then restores the
@@ -167,6 +183,10 @@ if executor.executionPresentation == .external {
 | Condition | Required result |
 |---|---|
 | Single click with retained highlight | No capture and no overlay |
+| Global multi-click switch off | Double/triple click does not capture; drag remains independent |
+| App policy `dragOnly` | Reject multi-click and allow drag/Shift-click |
+| App policy `disabled` | Reject pointer capture; keep hotkey/menu capture available |
+| Frontmost App changes after mouse-up | Invalidate before publishing any selection |
 | Drag below four points | No capture |
 | Drag at least four points | Capture after the short selection-settle delay |
 | Double/triple click with AX text | Capture after mouse-up without fallback |
@@ -207,11 +227,13 @@ if executor.executionPresentation == .external {
 - `Scripts/verify-overlay-state.sh` asserts explicit gesture rules, fallback
   success, equal-text detection, multi-type restore, timeout, cancellation,
   concurrent clipboard changes, AX hit classification for text/file-tree/tab,
-  file-object rejection, and fail-before-clear snapshot limits.
+  file-object rejection, native private-flavor restore, policy persistence,
+  capture-before-policy rejection, source switching, explicit-capture bypass,
+  and fail-before-clear snapshot limits.
 - `swift build --target ClipAll` verifies AppKit/Carbon integration compiles.
 - Manual QA must use `/Applications/ClipAll.app`: test TextEdit drag, double
   click, retained-highlight single click, normal typing, registered shortcut,
-  and at least one custom/WebView control.
+  one `dragOnly` App, one `disabled` App, and at least one custom/WebView control.
 
 ### 7. Wrong vs Correct
 

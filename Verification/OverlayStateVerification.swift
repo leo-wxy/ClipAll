@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import Foundation
 
 private enum OverlayStateVerificationError: Error, CustomStringConvertible {
@@ -17,6 +18,8 @@ enum OverlayStateVerification {
     static func main() async throws {
         try verifyPlacement()
         try verifyPointerSelectionGesture()
+        try verifySelectionAutomaticDisplayPolicies()
+        try await verifySelectionMonitorPolicyGate()
         try verifySelectionHitClassifier()
         try verifyEmptyPinnedPersistence()
         try verifyApplicationEntryVisibilityPersistence()
@@ -25,6 +28,7 @@ enum OverlayStateVerification {
     }
 
     private static func verifyClipboardSelectionFallback() async throws {
+        try await verifyClipboardScenario("私有类型恢复", verifyClipboardFallbackRestoresPrivateFlavor)
         try await verifyClipboardScenario("多格式恢复", verifyClipboardFallbackRestoresAllTypes)
         try await verifyClipboardScenario("相同文本", verifyClipboardFallbackDetectsSameTextCopy)
         try await verifyClipboardScenario("超时恢复", verifyClipboardFallbackRestoresAfterTimeout)
@@ -35,6 +39,67 @@ enum OverlayStateVerification {
         try await verifyClipboardScenario("动态文件对象", verifyClipboardFallbackRejectsDynamicFileObject)
         try await verifyClipboardScenario("图片对象", verifyClipboardFallbackRejectsImageObject)
         try await verifyClipboardScenario("Chromium 真文字", verifyClipboardFallbackAcceptsChromiumText)
+    }
+
+    private static func verifyClipboardFallbackRestoresPrivateFlavor() async throws {
+        _ = NSApplication.shared
+        let name = NSPasteboard.Name("com.wxy.ClipAll.verification.\(UUID().uuidString)")
+        let pasteboard = NSPasteboard(name: name)
+        defer {
+            pasteboard.clearContents()
+            pasteboard.releaseGlobally()
+        }
+
+        var nativePasteboard: Pasteboard?
+        guard PasteboardCreate(name.rawValue as CFString, &nativePasteboard) == noErr,
+              let nativePasteboard,
+              PasteboardClear(nativePasteboard) == noErr,
+              let itemIdentifier = UnsafeMutableRawPointer(bitPattern: 1) else {
+            throw OverlayStateVerificationError.failed("无法创建私有类型验证剪贴板")
+        }
+
+        let privateType = "com.trolltech.anymime.IMAGE_PATH"
+        let originalData = Data([0x43, 0x6C, 0x69, 0x70, 0x41, 0x6C, 0x6C])
+        guard PasteboardPutItemFlavor(
+            nativePasteboard,
+            itemIdentifier,
+            privateType as CFString,
+            originalData as CFData,
+            []
+        ) == noErr else {
+            throw OverlayStateVerificationError.failed("无法写入私有类型验证数据")
+        }
+
+        let fallback = ClipboardSelectionFallback(
+            pasteboard: pasteboard,
+            timeout: .milliseconds(100),
+            pollInterval: .milliseconds(1),
+            stabilityDelay: .milliseconds(1),
+            sendCopy: { _ in
+                writePasteboard(pasteboard, text: "selected")
+                return true
+            },
+            isSourceFrontmost: { _ in true }
+        )
+        let text = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+        try expect(text == "selected", "私有类型快照不应阻断本次取词")
+
+        _ = PasteboardSynchronize(nativePasteboard)
+        var restoredIdentifier: PasteboardItemID?
+        guard PasteboardGetItemIdentifier(nativePasteboard, 1, &restoredIdentifier) == noErr,
+              let restoredIdentifier else {
+            throw OverlayStateVerificationError.failed("私有类型快照未恢复 item")
+        }
+        var restoredData: CFData?
+        guard PasteboardCopyItemFlavorData(
+            nativePasteboard,
+            restoredIdentifier,
+            privateType as CFString,
+            &restoredData
+        ) == noErr,
+            restoredData as Data? == originalData else {
+            throw OverlayStateVerificationError.failed("私有类型数据未按字节恢复")
+        }
     }
 
     private static func verifyClipboardScenario(
@@ -333,7 +398,7 @@ enum OverlayStateVerification {
     }
 
     private static func writePasteboard(
-        _ pasteboard: VerificationPasteboard,
+        _ pasteboard: any ClipboardPasteboard,
         text: String,
         rtf: Data? = nil
     ) {
@@ -404,6 +469,216 @@ enum OverlayStateVerification {
             gesture.end(at: CGPoint(x: 3, y: 1), clickCount: 1) == nil,
             "阈值内的轻微移动仍应视为普通单击"
         )
+    }
+
+    private static func verifySelectionAutomaticDisplayPolicies() throws {
+        let suite = "ClipAll.SelectionPolicyVerification.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            throw OverlayStateVerificationError.failed("无法创建取词策略 UserDefaults")
+        }
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let settings = SettingsStore(defaults: defaults)
+        try expect(settings.isDragSelectionEnabled, "拖选默认应开启")
+        try expect(settings.isMultiClickSelectionEnabled, "双击/多击默认应开启")
+        try expect(
+            settings.allowsAutomaticDisplay(for: .drag, bundleIdentifier: nil),
+            "缺少 Bundle ID 时拖选应跟随全局默认"
+        )
+        try expect(
+            settings.allowsAutomaticDisplay(for: .multiClick, bundleIdentifier: nil),
+            "缺少 Bundle ID 时多击应跟随全局默认"
+        )
+
+        settings.isMultiClickSelectionEnabled = false
+        try expect(
+            !settings.allowsAutomaticDisplay(
+                for: .multiClick,
+                bundleIdentifier: "com.example.Global"
+            ),
+            "关闭全局多击后跟随全局的 App 不应自动显示"
+        )
+        try expect(
+            settings.allowsAutomaticDisplay(for: .drag, bundleIdentifier: "com.example.Global"),
+            "关闭全局多击不应影响拖选"
+        )
+
+        settings.isDragSelectionEnabled = false
+        try expect(
+            !settings.allowsAutomaticDisplay(
+                for: .shiftClick,
+                bundleIdentifier: "com.example.Global"
+            ),
+            "关闭全局拖选后 Shift 扩选也不应自动显示"
+        )
+
+        settings.setAutomaticDisplayPolicy(.dragOnly, for: "com.example.DragOnly")
+        try expect(
+            settings.allowsAutomaticDisplay(
+                for: .drag,
+                bundleIdentifier: "com.example.DragOnly"
+            ),
+            "仅拖选应覆盖关闭的全局拖选规则"
+        )
+        try expect(
+            !settings.allowsAutomaticDisplay(
+                for: .multiClick,
+                bundleIdentifier: "com.example.DragOnly"
+            ),
+            "仅拖选 App 的多击不应自动显示"
+        )
+
+        settings.setAutomaticDisplayPolicy(.disabled, for: "com.example.Disabled")
+        try expect(
+            !settings.allowsAutomaticDisplay(
+                for: .drag,
+                bundleIdentifier: "com.example.Disabled"
+            ),
+            "永不自动显示应拒绝拖选"
+        )
+        settings.setSelectionFallbackExcluded("com.example.Legacy", isExcluded: true)
+        try expect(
+            settings.selectionApplicationBundleIdentifiers == [
+                "com.example.Disabled",
+                "com.example.DragOnly",
+                "com.example.Legacy",
+            ],
+            "应用列表应合并显示策略与旧兼容排除名单"
+        )
+        try expect(
+            settings.automaticDisplayPolicy(for: "com.example.Legacy") == .followGlobal,
+            "旧兼容排除不得升级为禁止自动显示"
+        )
+
+        let reloaded = SettingsStore(defaults: defaults)
+        try expect(!reloaded.isDragSelectionEnabled, "拖选全局开关应持久化")
+        try expect(!reloaded.isMultiClickSelectionEnabled, "多击全局开关应持久化")
+        try expect(
+            reloaded.automaticDisplayPolicy(for: "com.example.DragOnly") == .dragOnly,
+            "应用自动显示策略应持久化"
+        )
+
+        reloaded.removeSelectionApplication("com.example.Legacy")
+        try expect(
+            !reloaded.selectionApplicationBundleIdentifiers.contains("com.example.Legacy"),
+            "删除应用规则应移除旧兼容排除记录"
+        )
+        try expect(
+            reloaded.allowsSelectionFallback(for: "com.example.Legacy"),
+            "删除应用规则后兼容取词应恢复全局默认"
+        )
+
+        let invalidPayload = [
+            "": SelectionAutomaticDisplayPolicy.disabled.rawValue,
+            "com.example.Valid": SelectionAutomaticDisplayPolicy.dragOnly.rawValue,
+            "com.example.Invalid": "futurePolicy",
+        ]
+        defaults.set(
+            try JSONEncoder().encode(invalidPayload),
+            forKey: "selectionAutomaticDisplayPolicies.v1"
+        )
+        let sanitized = SettingsStore(defaults: defaults)
+        try expect(
+            sanitized.selectionApplicationBundleIdentifiers.contains("com.example.Valid"),
+            "合法持久化策略应保留"
+        )
+        try expect(
+            !sanitized.selectionApplicationBundleIdentifiers.contains("com.example.Invalid"),
+            "未知持久化策略应忽略"
+        )
+
+        defaults.set(
+            ["  ", " com.example.Trimmed ", Bundle.main.bundleIdentifier ?? ""],
+            forKey: "selectionFallbackExcludedBundleIdentifiers.v1"
+        )
+        let sanitizedFallback = SettingsStore(defaults: defaults)
+        try expect(
+            sanitizedFallback.selectionFallbackExcludedBundleIdentifiers
+                == ["com.example.Trimmed"],
+            "兼容取词排除名单应忽略空值、自身并清理空白"
+        )
+    }
+
+    private static func verifySelectionMonitorPolicyGate() async throws {
+        let capture = VerificationSelectionCapture()
+        let bundleSource = VerificationBundleSource(value: "com.example.Blocked")
+        capture.sourceBundleIdentifier = bundleSource.value
+        var policyCallCount = 0
+        var invalidationCount = 0
+        var selectionCount = 0
+        let monitor = SelectionMonitor(
+            captureService: capture,
+            shortcut: .standard,
+            allowsAutomaticDisplay: { _, bundleIdentifier in
+                policyCallCount += 1
+                return bundleIdentifier != "com.example.Blocked"
+            },
+            frontmostBundleIdentifier: { bundleSource.value },
+            onSelection: { _ in selectionCount += 1 },
+            onSelectionInvalidated: { invalidationCount += 1 }
+        )
+
+        monitor.capturePointerSelection(
+            .multiClick,
+            sourceBundleIdentifier: bundleSource.value,
+            after: .zero,
+            requiresRunning: false
+        )
+        try expect(capture.callCount == 0, "禁用 App 必须在捕获前被拒绝")
+        try expect(invalidationCount == 1, "拒绝自动显示时应关闭旧浮窗")
+
+        bundleSource.value = "com.example.Allowed"
+        capture.sourceBundleIdentifier = bundleSource.value
+        monitor.capturePointerSelection(
+            .multiClick,
+            sourceBundleIdentifier: bundleSource.value,
+            after: .zero,
+            requiresRunning: false
+        )
+        try await waitUntil("允许的多击未触发捕获") { capture.callCount == 1 }
+        try expect(
+            capture.fallbackPolicies == [.rejectKnownNonText],
+            "多击通过门禁后必须保留原 fallback policy"
+        )
+        try expect(selectionCount == 1, "允许的自动捕获应发布一次选区")
+
+        bundleSource.value = "com.example.BeforeSwitch"
+        capture.sourceBundleIdentifier = bundleSource.value
+        monitor.capturePointerSelection(
+            .drag,
+            sourceBundleIdentifier: bundleSource.value,
+            after: .milliseconds(25),
+            requiresRunning: false
+        )
+        bundleSource.value = "com.example.AfterSwitch"
+        capture.sourceBundleIdentifier = bundleSource.value
+        try await waitUntil("来源 App 切换后未使旧选区失效") { invalidationCount == 2 }
+        try expect(capture.callCount == 1, "来源 App 切换后不得读取新前台 App")
+
+        let pointerPolicyCalls = policyCallCount
+        capture.sourceBundleIdentifier = bundleSource.value
+        monitor.captureNow()
+        try await waitUntil("菜单主动取词未绕过自动策略") { capture.callCount == 2 }
+        monitor.handleRegisteredHotKey(requiresRunning: false)
+        try await waitUntil("全局快捷键未绕过自动策略") { capture.callCount == 3 }
+        try expect(
+            policyCallCount == pointerPolicyCalls,
+            "菜单和快捷键不得调用鼠标自动显示策略"
+        )
+    }
+
+    private static func waitUntil(
+        _ failureMessage: String,
+        condition: @MainActor () -> Bool
+    ) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now + .milliseconds(500)
+        while !condition() {
+            guard clock.now < deadline else {
+                throw OverlayStateVerificationError.failed(failureMessage)
+            }
+            try await Task.sleep(for: .milliseconds(1))
+        }
     }
 
     private static func verifySelectionHitClassifier() throws {
@@ -641,6 +916,35 @@ enum OverlayStateVerification {
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {
         guard condition() else { throw OverlayStateVerificationError.failed(message) }
+    }
+}
+
+@MainActor
+private final class VerificationBundleSource {
+    var value: String?
+
+    init(value: String?) {
+        self.value = value
+    }
+}
+
+@MainActor
+private final class VerificationSelectionCapture: SelectionCapturing {
+    private(set) var callCount = 0
+    private(set) var fallbackPolicies: [SelectionFallbackPolicy] = []
+    var sourceBundleIdentifier: String?
+
+    func captureCurrentSelection(
+        triggerLocation: CGPoint,
+        fallbackPolicy: SelectionFallbackPolicy
+    ) async throws -> SelectionContext {
+        callCount += 1
+        fallbackPolicies.append(fallbackPolicy)
+        return SelectionContext(
+            text: "selected",
+            sourceBundleIdentifier: sourceBundleIdentifier,
+            triggerLocation: triggerLocation
+        )!
     }
 }
 

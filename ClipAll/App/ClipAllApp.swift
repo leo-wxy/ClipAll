@@ -75,17 +75,9 @@ private struct MenuBarStatusIcon: View {
 
 private struct MenuBarContent: View {
     let environment: AppEnvironment
-    @ObservedObject private var settings: SettingsStore
     @Environment(\.openWindow) private var openWindow
 
-    init(environment: AppEnvironment) {
-        self.environment = environment
-        _settings = ObservedObject(wrappedValue: environment.settings)
-    }
-
     var body: some View {
-        Toggle("启用 ClipAll", isOn: monitoringBinding)
-
         Button("显示当前选区") {
             environment.captureSelectionNow()
         }
@@ -109,13 +101,6 @@ private struct MenuBarContent: View {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q", modifiers: .command)
-    }
-
-    private var monitoringBinding: Binding<Bool> {
-        Binding(
-            get: { settings.isMonitoringEnabled },
-            set: { settings.isMonitoringEnabled = $0 }
-        )
     }
 
     private func bringSettingsToFront() {

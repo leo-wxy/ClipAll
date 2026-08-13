@@ -23,6 +23,10 @@ final class SettingsStore: ObservableObject {
         static let selectionFallbackEnabled = "selectionFallbackEnabled"
         static let selectionFallbackExcludedBundleIdentifiers =
             "selectionFallbackExcludedBundleIdentifiers.v1"
+        static let dragSelectionEnabled = "dragSelectionEnabled"
+        static let multiClickSelectionEnabled = "multiClickSelectionEnabled"
+        static let selectionAutomaticDisplayPolicies =
+            "selectionAutomaticDisplayPolicies.v1"
         static let pinnedCapabilityIDs = "pinnedCapabilityIDs"
         static let recentCapabilityIDs = "recentCapabilityIDs"
         static let globalShortcut = "globalShortcut"
@@ -54,6 +58,24 @@ final class SettingsStore: ObservableObject {
             defaults.set(
                 selectionFallbackExcludedBundleIdentifiers,
                 forKey: Key.selectionFallbackExcludedBundleIdentifiers
+            )
+        }
+    }
+
+    @Published var isDragSelectionEnabled: Bool {
+        didSet { defaults.set(isDragSelectionEnabled, forKey: Key.dragSelectionEnabled) }
+    }
+
+    @Published var isMultiClickSelectionEnabled: Bool {
+        didSet { defaults.set(isMultiClickSelectionEnabled, forKey: Key.multiClickSelectionEnabled) }
+    }
+
+    @Published private(set) var selectionAutomaticDisplayPolicies:
+        [String: SelectionAutomaticDisplayPolicy] {
+        didSet {
+            persist(
+                selectionAutomaticDisplayPolicies.mapValues(\.rawValue),
+                key: Key.selectionAutomaticDisplayPolicies
             )
         }
     }
@@ -109,9 +131,21 @@ final class SettingsStore: ObservableObject {
         } else {
             isSelectionFallbackEnabled = defaults.bool(forKey: Key.selectionFallbackEnabled)
         }
-        selectionFallbackExcludedBundleIdentifiers = Array(
-            Set(defaults.stringArray(forKey: Key.selectionFallbackExcludedBundleIdentifiers) ?? [])
-        ).sorted()
+        selectionFallbackExcludedBundleIdentifiers = Array(Set(
+            (defaults.stringArray(forKey: Key.selectionFallbackExcludedBundleIdentifiers) ?? [])
+                .compactMap(Self.normalizedBundleIdentifier)
+        )).sorted()
+        isDragSelectionEnabled = defaults.object(forKey: Key.dragSelectionEnabled) == nil
+            || defaults.bool(forKey: Key.dragSelectionEnabled)
+        isMultiClickSelectionEnabled = defaults.object(forKey: Key.multiClickSelectionEnabled) == nil
+            || defaults.bool(forKey: Key.multiClickSelectionEnabled)
+        selectionAutomaticDisplayPolicies = Self.sanitizeAutomaticDisplayPolicies(
+            Self.load(
+                [String: String].self,
+                defaults: defaults,
+                key: Key.selectionAutomaticDisplayPolicies
+            ) ?? [:]
+        )
 
         if defaults.object(forKey: Key.pinnedCapabilityIDs) == nil {
             pinnedCapabilityIDs = [.search, .translate]
@@ -157,8 +191,7 @@ final class SettingsStore: ObservableObject {
     }
 
     func setSelectionFallbackExcluded(_ bundleIdentifier: String, isExcluded: Bool) {
-        let normalized = bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return }
+        guard let normalized = Self.normalizedBundleIdentifier(bundleIdentifier) else { return }
         var updated = Set(selectionFallbackExcludedBundleIdentifiers)
         if isExcluded {
             updated.insert(normalized)
@@ -171,6 +204,53 @@ final class SettingsStore: ObservableObject {
     func allowsSelectionFallback(for bundleIdentifier: String?) -> Bool {
         guard isSelectionFallbackEnabled, let bundleIdentifier else { return false }
         return !selectionFallbackExcludedBundleIdentifiers.contains(bundleIdentifier)
+    }
+
+    var selectionApplicationBundleIdentifiers: [String] {
+        Array(
+            Set(selectionAutomaticDisplayPolicies.keys)
+                .union(selectionFallbackExcludedBundleIdentifiers)
+        ).sorted()
+    }
+
+    func automaticDisplayPolicy(
+        for bundleIdentifier: String?
+    ) -> SelectionAutomaticDisplayPolicy {
+        guard let bundleIdentifier else { return .followGlobal }
+        return selectionAutomaticDisplayPolicies[bundleIdentifier] ?? .followGlobal
+    }
+
+    func allowsAutomaticDisplay(
+        for intent: PointerSelectionIntent,
+        bundleIdentifier: String?
+    ) -> Bool {
+        automaticDisplayPolicy(for: bundleIdentifier).allows(
+            intent,
+            isDragEnabled: isDragSelectionEnabled,
+            isMultiClickEnabled: isMultiClickSelectionEnabled
+        )
+    }
+
+    func addSelectionApplication(_ bundleIdentifier: String) {
+        let normalized = Self.normalizedBundleIdentifier(bundleIdentifier)
+        guard let normalized,
+              selectionAutomaticDisplayPolicies[normalized] == nil else { return }
+        selectionAutomaticDisplayPolicies[normalized] = .followGlobal
+    }
+
+    func setAutomaticDisplayPolicy(
+        _ policy: SelectionAutomaticDisplayPolicy,
+        for bundleIdentifier: String
+    ) {
+        guard let normalized = Self.normalizedBundleIdentifier(bundleIdentifier) else { return }
+        selectionAutomaticDisplayPolicies[normalized] = policy
+    }
+
+    func removeSelectionApplication(_ bundleIdentifier: String) {
+        let normalized = bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return }
+        selectionAutomaticDisplayPolicies.removeValue(forKey: normalized)
+        setSelectionFallbackExcluded(normalized, isExcluded: false)
     }
 
     @discardableResult
@@ -255,6 +335,13 @@ final class SettingsStore: ObservableObject {
         persist(payload, key: Key.pluginEnabledStates)
     }
 
+    private static func normalizedBundleIdentifier(_ bundleIdentifier: String) -> String? {
+        let normalized = bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty,
+              normalized != Bundle.main.bundleIdentifier else { return nil }
+        return normalized
+    }
+
     private static func loadIDs(defaults: UserDefaults, key: String) -> [CapabilityID] {
         (defaults.stringArray(forKey: key) ?? []).map { CapabilityID($0) }
     }
@@ -270,6 +357,22 @@ final class SettingsStore: ObservableObject {
 
     private static func sanitizePinned(_ ids: [CapabilityID]) -> [CapabilityID] {
         Array(ids.uniqued().prefix(maximumPinnedCapabilities))
+    }
+
+    private static func sanitizeAutomaticDisplayPolicies(
+        _ stored: [String: String]
+    ) -> [String: SelectionAutomaticDisplayPolicy] {
+        var sanitized: [String: SelectionAutomaticDisplayPolicy] = [:]
+        for (bundleIdentifier, rawPolicy) in stored {
+            let normalized = bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty,
+                  normalized != Bundle.main.bundleIdentifier,
+                  let policy = SelectionAutomaticDisplayPolicy(rawValue: rawPolicy) else {
+                continue
+            }
+            sanitized[normalized] = policy
+        }
+        return sanitized
     }
 }
 

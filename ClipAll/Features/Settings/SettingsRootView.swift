@@ -3,6 +3,7 @@ import Combine
 import SwiftUI
 
 private enum SettingsSection: String, CaseIterable, Hashable, Identifiable {
+    case selection
     case general
     case capabilities
     case plugins
@@ -12,6 +13,7 @@ private enum SettingsSection: String, CaseIterable, Hashable, Identifiable {
 
     var title: String {
         switch self {
+        case .selection: "取词"
         case .general: "通用"
         case .capabilities: "操作栏"
         case .plugins: "插件"
@@ -21,6 +23,7 @@ private enum SettingsSection: String, CaseIterable, Hashable, Identifiable {
 
     var symbolName: String {
         switch self {
+        case .selection: "selection.pin.in.out"
         case .general: "gearshape"
         case .capabilities: "rectangle.stack"
         case .plugins: "puzzlepiece.extension"
@@ -31,7 +34,7 @@ private enum SettingsSection: String, CaseIterable, Hashable, Identifiable {
 
 @MainActor
 private final class SettingsNavigationModel: ObservableObject {
-    @Published var selection: SettingsSection = .plugins
+    @Published var selection: SettingsSection = .selection
 }
 
 struct SettingsRootView: View {
@@ -132,6 +135,8 @@ struct SettingsRootView: View {
     @ViewBuilder
     private var content: some View {
         switch navigation.selection {
+        case .selection:
+            SelectionSettingsView(settings: environment.settings)
         case .general:
             GeneralSettingsView(
                 settings: environment.settings,

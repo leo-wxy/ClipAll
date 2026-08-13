@@ -25,6 +25,8 @@ final class SelectionMonitor {
     typealias SelectionHandler = @MainActor (SelectionContext) -> Void
     typealias PermissionHandler = @MainActor () -> Void
     typealias InvalidationHandler = @MainActor () -> Void
+    typealias AutomaticDisplayPolicy = @MainActor (PointerSelectionIntent, String?) -> Bool
+    typealias FrontmostBundleIdentifierProvider = @MainActor () -> String?
 
     private struct SelectionSignature: Equatable {
         let text: String
@@ -33,13 +35,13 @@ final class SelectionMonitor {
     }
 
     private enum CaptureTrigger {
-        case pointer(PointerSelectionIntent)
+        case pointer(PointerSelectionIntent, sourceBundleIdentifier: String?)
         case hotKey
         case manual
 
         var name: String {
             switch self {
-            case let .pointer(intent):
+            case let .pointer(intent, _):
                 "pointer-\(intent.rawValue)"
             case .hotKey:
                 "hotKey"
@@ -50,7 +52,7 @@ final class SelectionMonitor {
 
         var fallbackPolicy: SelectionFallbackPolicy {
             switch self {
-            case let .pointer(intent):
+            case let .pointer(intent, _):
                 intent.fallbackPolicy
             case .hotKey, .manual:
                 .enabled
@@ -59,6 +61,8 @@ final class SelectionMonitor {
     }
 
     private let captureService: any SelectionCapturing
+    private let allowsAutomaticDisplay: AutomaticDisplayPolicy
+    private let frontmostBundleIdentifier: FrontmostBundleIdentifierProvider
     private let onSelection: SelectionHandler
     private let onPermissionRequired: PermissionHandler
     private let onSelectionInvalidated: InvalidationHandler
@@ -77,12 +81,18 @@ final class SelectionMonitor {
     init(
         captureService: any SelectionCapturing,
         shortcut: GlobalShortcutConfiguration,
+        allowsAutomaticDisplay: @escaping AutomaticDisplayPolicy = { _, _ in true },
+        frontmostBundleIdentifier: @escaping FrontmostBundleIdentifierProvider = {
+            NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        },
         onSelection: @escaping SelectionHandler,
         onPermissionRequired: @escaping PermissionHandler = {},
         onSelectionInvalidated: @escaping InvalidationHandler = {}
     ) {
         self.captureService = captureService
         self.shortcut = shortcut
+        self.allowsAutomaticDisplay = allowsAutomaticDisplay
+        self.frontmostBundleIdentifier = frontmostBundleIdentifier
         self.onSelection = onSelection
         self.onPermissionRequired = onPermissionRequired
         self.onSelectionInvalidated = onSelectionInvalidated
@@ -162,12 +172,13 @@ final class SelectionMonitor {
         )
     }
 
-    fileprivate func handleRegisteredHotKey() {
-        guard isRunning else { return }
+    func handleRegisteredHotKey(requiresRunning: Bool = true) {
+        guard isRunning || !requiresRunning else { return }
         scheduleCapture(
             after: .milliseconds(20),
             allowsDuplicate: true,
-            trigger: .hotKey
+            trigger: .hotKey,
+            requiresRunning: requiresRunning
         )
     }
 
@@ -182,10 +193,31 @@ final class SelectionMonitor {
                   clickCount: clickCount,
                   isShiftPressed: isShiftPressed
               ) else { return }
+        capturePointerSelection(
+            intent,
+            sourceBundleIdentifier: frontmostBundleIdentifier()
+        )
+    }
+
+    func capturePointerSelection(
+        _ intent: PointerSelectionIntent,
+        sourceBundleIdentifier: String?,
+        after delay: Duration = .milliseconds(45),
+        requiresRunning: Bool = true
+    ) {
+        guard isRunning || !requiresRunning else { return }
+        captureTask?.cancel()
+        captureTask = nil
+        let trigger = CaptureTrigger.pointer(
+            intent,
+            sourceBundleIdentifier: sourceBundleIdentifier
+        )
+        guard validatePointerTrigger(trigger) else { return }
         scheduleCapture(
-            after: .milliseconds(45),
+            after: delay,
             allowsDuplicate: false,
-            trigger: .pointer(intent)
+            trigger: trigger,
+            requiresRunning: requiresRunning
         )
     }
 
@@ -257,6 +289,7 @@ final class SelectionMonitor {
                     try await Task.sleep(for: delay)
                 }
                 try Task.checkCancellation()
+                guard validatePointerTrigger(trigger) else { return }
                 Self.logger.info(
                     "Selection capture requested: trigger=\(trigger.name, privacy: .public), fallbackPolicy=\(trigger.fallbackPolicy.rawValue, privacy: .public)"
                 )
@@ -265,6 +298,7 @@ final class SelectionMonitor {
                     fallbackPolicy: trigger.fallbackPolicy
                 )
                 guard !Task.isCancelled, self.isRunning || !requiresRunning else { return }
+                guard validatePointerTrigger(trigger, context: context) else { return }
                 guard allowsDuplicate || shouldPublish(context) else { return }
                 onSelection(context)
             } catch let error as SelectionCaptureError {
@@ -283,6 +317,31 @@ final class SelectionMonitor {
                 onSelectionInvalidated()
             }
         }
+    }
+
+    private func validatePointerTrigger(
+        _ trigger: CaptureTrigger,
+        context: SelectionContext? = nil
+    ) -> Bool {
+        guard case let .pointer(intent, expectedBundleIdentifier) = trigger else { return true }
+        let currentBundleIdentifier = frontmostBundleIdentifier()
+        guard currentBundleIdentifier == expectedBundleIdentifier,
+              context == nil
+                || context?.sourceBundleIdentifier == expectedBundleIdentifier else {
+            onSelectionInvalidated()
+            Self.logger.info(
+                "Selection capture suppressed: trigger=pointer-\(intent.rawValue, privacy: .public), bundleIdentifier=\(expectedBundleIdentifier ?? "unknown", privacy: .public), reason=sourceChanged"
+            )
+            return false
+        }
+        guard allowsAutomaticDisplay(intent, currentBundleIdentifier) else {
+            onSelectionInvalidated()
+            Self.logger.info(
+                "Selection capture suppressed: trigger=pointer-\(intent.rawValue, privacy: .public), bundleIdentifier=\(currentBundleIdentifier ?? "unknown", privacy: .public), reason=userPolicy"
+            )
+            return false
+        }
+        return true
     }
 
     private func shouldPublish(_ context: SelectionContext) -> Bool {

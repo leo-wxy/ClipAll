@@ -97,6 +97,12 @@ final class AppEnvironment: ObservableObject {
         let selectionMonitor = SelectionMonitor(
             captureService: selectionCapture,
             shortcut: settings.globalShortcut,
+            allowsAutomaticDisplay: { intent, bundleIdentifier in
+                settings.allowsAutomaticDisplay(
+                    for: intent,
+                    bundleIdentifier: bundleIdentifier
+                )
+            },
             onSelection: { [weak overlayCoordinator] context in
                 overlayCoordinator?.present(context)
             },
