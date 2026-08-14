@@ -1,0 +1,7 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Preserve Runner Pipe, limits, error ordering, privacy and verification contracts while changing the process DTO."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Keep plugin configuration and uninstall UI within existing SwiftUI component and accessibility patterns."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Apply full app build and installed Applications-copy UI quality requirements."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Reuse PluginConfigurationStore and keep its existing typed and resolved reads instead of adding a facade."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"The manifest, process JSON, Runner API, UI, example and docs form one cross-layer contract."}
+{"file":".trellis/tasks/08-14-plugin-runtime-config-api/research/runtime-contract.md","reason":"Runtime v1 call sites, compatibility evidence and the minimal v2 synchronization surface."}
+{"file":".trellis/tasks/08-14-plugin-runtime-config-api/research/config-lifecycle.md","reason":"Configuration ownership, consumer inventory and uninstall residual-data evidence."}

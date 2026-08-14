@@ -1,0 +1,7 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Verify Runner privacy, timeout, size and error contracts remain intact after v2 migration."}
+{"file":".trellis/spec/backend/local-build-and-release.md","reason":"Verify full checks, Applications-only installation and user QA gate."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Review plugin settings and uninstall confirmation against established SwiftUI patterns."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Run the full application and interaction quality checks required by the project."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Audit every manifest/DTO/Runner/host/example/docs boundary for v1/v2 drift."}
+{"file":".trellis/tasks/08-14-plugin-runtime-config-api/research/runtime-contract.md","reason":"Check the complete Runtime compatibility and synchronization surface."}
+{"file":".trellis/tasks/08-14-plugin-runtime-config-api/research/config-lifecycle.md","reason":"Check unified configuration semantics and pluginID cleanup against the verified current flow."}
