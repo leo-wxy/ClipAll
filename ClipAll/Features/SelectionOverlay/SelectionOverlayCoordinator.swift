@@ -1,7 +1,26 @@
 import AppKit
+import Carbon.HIToolbox
 import Combine
 import OSLog
 import SwiftUI
+
+private let clipAllOverlayHotKeySignature: OSType = 0x434C_4F56 // "CLOV"
+private let clipAllOverlayEscapeHotKeyIdentifier: UInt32 = 1
+
+private let clipAllOverlayEscapeHotKeyHandler: EventHandlerUPP = { _, event, userData in
+    guard matchesClipAllHotKeyEvent(
+        event,
+        signature: clipAllOverlayHotKeySignature,
+        identifier: clipAllOverlayEscapeHotKeyIdentifier
+    ), let userData else { return OSStatus(eventNotHandledErr) }
+    let coordinator = Unmanaged<SelectionOverlayCoordinator>
+        .fromOpaque(userData)
+        .takeUnretainedValue()
+    Task { @MainActor in
+        coordinator.dismiss()
+    }
+    return noErr
+}
 
 @MainActor
 final class SelectionOverlayCoordinator {
@@ -23,6 +42,8 @@ final class SelectionOverlayCoordinator {
     private var globalMouseMonitor: Any?
     private var localMouseMonitor: Any?
     private var workspaceActivationObserver: NSObjectProtocol?
+    private var escapeHotKeyRef: EventHotKeyRef?
+    private var escapeHotKeyHandlerRef: EventHandlerRef?
     private var synchronizationTask: Task<Void, Never>?
     private var positionedContextID: UUID?
     private var anchoredTopLeft: CGPoint?
@@ -95,6 +116,7 @@ final class SelectionOverlayCoordinator {
     private func hidePanel() {
         synchronizationTask?.cancel()
         synchronizationTask = nil
+        unregisterEscapeHotKey()
         positionedContextID = nil
         anchoredTopLeft = nil
         if panel.isKeyWindow {
@@ -169,6 +191,7 @@ final class SelectionOverlayCoordinator {
             panel.allowsKeyboardInput = false
         }
         panel.setFrame(frame, display: true, animate: false)
+        registerEscapeHotKey()
         if !keepsCurrentAnchor {
             anchoredTopLeft = CGPoint(x: panel.frame.minX, y: panel.frame.maxY)
         }
@@ -241,6 +264,60 @@ final class SelectionOverlayCoordinator {
                 self.dismiss()
             }
         }
+    }
+
+    private func registerEscapeHotKey() {
+        guard escapeHotKeyRef == nil else { return }
+        let handlerStatus = installEscapeHotKeyHandlerIfNeeded()
+        guard handlerStatus == noErr else {
+            Self.logger.error(
+                "Escape handler registration failed: status=\(handlerStatus, privacy: .public)"
+            )
+            return
+        }
+
+        var reference: EventHotKeyRef?
+        let identifier = EventHotKeyID(
+            signature: clipAllOverlayHotKeySignature,
+            id: clipAllOverlayEscapeHotKeyIdentifier
+        )
+        let status = RegisterEventHotKey(
+            UInt32(kVK_Escape),
+            0,
+            identifier,
+            GetApplicationEventTarget(),
+            0,
+            &reference
+        )
+        if status == noErr {
+            escapeHotKeyRef = reference
+        } else {
+            Self.logger.error(
+                "Escape hot key registration failed: status=\(status, privacy: .public)"
+            )
+        }
+    }
+
+    private func installEscapeHotKeyHandlerIfNeeded() -> OSStatus {
+        guard escapeHotKeyHandlerRef == nil else { return noErr }
+        var eventType = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
+        return InstallEventHandler(
+            GetApplicationEventTarget(),
+            clipAllOverlayEscapeHotKeyHandler,
+            1,
+            &eventType,
+            Unmanaged.passUnretained(self).toOpaque(),
+            &escapeHotKeyHandlerRef
+        )
+    }
+
+    private func unregisterEscapeHotKey() {
+        guard let escapeHotKeyRef else { return }
+        UnregisterEventHotKey(escapeHotKeyRef)
+        self.escapeHotKeyRef = nil
     }
 
 }

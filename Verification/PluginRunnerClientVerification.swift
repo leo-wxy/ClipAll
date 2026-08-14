@@ -94,7 +94,7 @@ enum PluginRunnerClientVerification {
             name: "nonzero.sh",
             contents: """
             #!/bin/sh
-            printf '{"protocolVersion":1,"status":"failure","output":null,"error":{"code":"test","message":"test","sourceLocation":null},"logs":[]}'
+            printf '{"protocolVersion":2,"status":"failure","output":null,"error":{"code":"test","message":"test","sourceLocation":null},"logs":[]}'
             exit 1
             """
         )
@@ -205,7 +205,7 @@ enum PluginRunnerClientVerification {
     }
 
     private static let successResponse = """
-    {"protocolVersion":1,"status":"success","output":{"title":"Verification","subtitle":null,"items":[{"id":"result","label":"结果","value":"ok","annotation":null,"style":"body"}]},"error":null,"logs":[]}
+    {"protocolVersion":2,"status":"success","output":{"title":"Verification","subtitle":null,"items":[{"id":"result","label":"结果","value":"ok","annotation":null,"style":"body"}]},"error":null,"logs":[]}
     """
 
     private static func successScript(preamble: String? = nil) -> String {
@@ -232,10 +232,9 @@ enum PluginRunnerClientVerification {
             sourceName: "verification.js",
             handler: "run",
             input: PluginRuntimeInput(
+                pluginID: "com.clipall.verification",
                 text: "test",
-                configuration: [:],
-                localeIdentifier: "en_US",
-                systemTimeZoneIdentifier: "UTC"
+                configuration: [:]
             ),
             capturesLogs: false
         )

@@ -88,6 +88,109 @@ response on stdout. `PluginRuntimeLimits` owns protocol and byte limits.
 
 `process.standardInput = Pipe()`
 
+## Scenario: Plugin Runtime Configuration API v2
+
+### 1. Scope / Trigger
+
+Apply this contract when changing external plugin manifests, Runner request
+DTOs, JavaScript handler arguments, plugin configuration, or uninstall data
+cleanup.
+
+### 2. Signatures
+
+```swift
+PluginRuntimeInput(
+    pluginID: PluginID,
+    text: String,
+    configuration: [String: PluginRuntimeConfigurationValue]
+)
+
+PluginLifecycleController.uninstall(pluginID: PluginID) async throws
+```
+
+```javascript
+const configuration = App.getPluginEnv(pluginID)
+ClipAllPlugin.handler = function (text) { /* ... */ }
+```
+
+Both `manifestVersion` and `PluginRuntimeLimits.protocolVersion` are `2`.
+
+### 3. Contracts
+
+- A handler receives selected text as its only argument. Configuration, locale,
+  timezone, and host objects are not handler parameters.
+- `App.getPluginEnv(id)` accepts only the currently executing stable plugin ID
+  and returns the launch-time resolved configuration snapshot.
+- The snapshot contains declared non-secret fields only, merges manifest
+  defaults with user overrides, filters stale fields, and is recursively frozen.
+- `PluginConfigurationStore` remains the single ordinary-configuration source
+  for settings, built-in capabilities, external execution, and the debugger.
+- The Runner exposes no raw request global and gains no file, network,
+  pasteboard, Accessibility, Keychain, or configuration-write capability.
+- Disabling, upgrading, and reloading preserve configuration. Uninstall removes
+  plugin-scoped Keychain accounts before package mutation and removes ordinary
+  configuration after package removal succeeds.
+- Only the bundled TimestampTools package may automatically replace an
+  installed v1 copy. Other v1 manifests remain invalid.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+| --- | --- |
+| Manifest version is not 2 | `manifest_version` at `$.manifestVersion` |
+| Runner protocol is not 2 | `unsupported_protocol` before v2 DTO decoding |
+| `getPluginEnv` receives another or empty ID | deterministic plugin-ID error |
+| Plugin has no configuration | return frozen `{}` |
+| Field is secret, unknown, or removed | never include it in the snapshot |
+| Configuration field type is invalid | reject the field write |
+| Keychain enumeration/deletion fails | abort uninstall before registry/package mutation |
+| Package removal fails | retain ordinary configuration |
+| Uninstall succeeds | delete capability references, state, ordinary config, and secrets |
+
+### 5. Good / Base / Bad Cases
+
+- Good: `handler(text)` reads its own frozen environment through
+  `App.getPluginEnv("com.example.plugin")`.
+- Base: a plugin with no fields receives `{}` and returns a normal result.
+- Good: changing one setting preserves sibling fields and is visible to the
+  next formal execution and debugger execution.
+- Bad: pass the whole request object to JavaScript or expose
+  `globalThis.__clipallRequest`.
+- Bad: retain plugin configuration after uninstall or silently swallow a
+  Keychain cleanup failure.
+
+### 6. Tests Required
+
+- `Scripts/verify-plugin.sh` asserts string handler input, own-ID access,
+  cross-ID rejection, frozen snapshots, hidden raw request, and real fixtures.
+- `Scripts/verify-runner-client.sh` asserts a real v1 request returns
+  `unsupported_protocol` and keeps process failure limits stable.
+- `Scripts/verify-overlay-state.sh` asserts defaults, sibling isolation, type
+  rejection, stale/secret filtering, and ordinary configuration removal.
+- `Scripts/verify-lifecycle.sh` asserts exact plugin-ID secret cleanup,
+  failure-before-mutation ordering, and successful uninstall cleanup.
+- `Scripts/verify-core.sh`, `Scripts/verify-all.sh`, and
+  `swift build --target ClipAll` must pass before commit.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```javascript
+function handler(request) {
+  return request.configuration.mode
+}
+```
+
+#### Correct
+
+```javascript
+function handler(text) {
+  const mode = App.getPluginEnv("com.example.plugin").mode
+  return { title: text, subtitle: mode, items: [] }
+}
+```
+
 ## Scenario: Cross-App Pointer Selection Fallback
 
 ### 1. Scope / Trigger

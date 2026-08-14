@@ -63,7 +63,8 @@ final class AppEnvironment: ObservableObject {
             settings: settings,
             configurationStore: configuration,
             runnerClient: runnerClient,
-            developmentStore: developmentStore
+            developmentStore: developmentStore,
+            deletePluginSecrets: { try secrets.deleteSecrets(pluginID: $0) }
         )
 
         do {

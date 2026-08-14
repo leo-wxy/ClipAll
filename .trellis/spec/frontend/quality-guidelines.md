@@ -40,6 +40,15 @@
   top edge.
 - Copy success dismisses immediately. New visual animation must not delay the
   store's dismissal or intercept source-app key events.
+- While the overlay is visible, register Escape as a temporary Carbon hot key;
+  unregister it synchronously whenever the panel hides. This closes compact and
+  expanded states without making the non-activating panel key.
+- Every Carbon hot-key handler must validate the event's `EventHotKeyID` before
+  acting, so Escape cannot trigger selection capture and the configured capture
+  shortcut cannot dismiss the overlay.
+- Do not implement Escape dismissal with an `NSEvent.keyDown` monitor. Ordinary
+  keyboard events must stay in the source App to preserve IME composition and
+  prevent duplicated input.
 
 ## Scenario: External Capability Dismissal
 
@@ -229,7 +238,7 @@ if executor.executionPresentation == .external {
   concurrent clipboard changes, AX hit classification for text/file-tree/tab,
   file-object rejection, native private-flavor restore, policy persistence,
   capture-before-policy rejection, source switching, explicit-capture bypass,
-  and fail-before-clear snapshot limits.
+  fail-before-clear snapshot limits, and Carbon hot-key ID isolation.
 - `swift build --target ClipAll` verifies AppKit/Carbon integration compiles.
 - Manual QA must use `/Applications/ClipAll.app`: test TextEdit drag, double
   click, retained-highlight single click, normal typing, registered shortcut,

@@ -51,6 +51,7 @@ final class PluginLifecycleController: ObservableObject {
     private let runnerClient: PluginRunnerClient
     private let packageValidator: PluginPackageValidator
     private let developmentStore: DevelopmentPluginStore
+    private let deletePluginSecrets: (PluginID) throws -> Void
     private var isMutationInProgress = false
 
     init(
@@ -60,7 +61,8 @@ final class PluginLifecycleController: ObservableObject {
         configurationStore: PluginConfigurationStore,
         runnerClient: PluginRunnerClient,
         packageValidator: PluginPackageValidator = PluginPackageValidator(),
-        developmentStore: DevelopmentPluginStore
+        developmentStore: DevelopmentPluginStore,
+        deletePluginSecrets: @escaping (PluginID) throws -> Void
     ) {
         self.installationStore = installationStore
         self.registry = registry
@@ -69,6 +71,7 @@ final class PluginLifecycleController: ObservableObject {
         self.runnerClient = runnerClient
         self.packageValidator = packageValidator
         self.developmentStore = developmentStore
+        self.deletePluginSecrets = deletePluginSecrets
     }
 
     func loadInstalled() async {
@@ -133,10 +136,12 @@ final class PluginLifecycleController: ObservableObject {
         pluginID: PluginID,
         from bundledURL: URL
     ) async throws -> Bool {
+        guard pluginID == .timestampTools else { return false }
+
         let installedName = "\(pluginID.rawValue).clipallplugin"
         guard invalidPlugins.contains(where: {
             $0.packageURL.lastPathComponent == installedName
-                && $0.issue.code == "incompatible_host"
+                && ["incompatible_host", "manifest_version"].contains($0.issue.code)
         }) else {
             return false
         }
@@ -248,7 +253,7 @@ final class PluginLifecycleController: ObservableObject {
         sortPlugins()
     }
 
-    func uninstall(pluginID: PluginID, removesConfiguration: Bool) async throws {
+    func uninstall(pluginID: PluginID) async throws {
         try beginMutation()
         defer { isMutationInProgress = false }
         guard let existing = plugins.first(where: { $0.id == pluginID }) else {
@@ -257,6 +262,8 @@ final class PluginLifecycleController: ObservableObject {
         guard existing.package.definition.descriptor.source == .installed else {
             throw PluginLifecycleError.operationUnavailable("开发插件只能移除引用，不会删除源码")
         }
+
+        try deletePluginSecrets(pluginID)
 
         let wasEnabled = existing.state == .enabled
         let removedIDs = wasEnabled ? registry.unregister(pluginID: pluginID) : []
@@ -271,11 +278,7 @@ final class PluginLifecycleController: ObservableObject {
         settings.removeCapabilityReferences(removedIDs)
         plugins.removeAll(where: { $0.id == pluginID })
         settings.removePluginState(pluginID)
-        if removesConfiguration {
-            configurationStore.removeData(pluginID: pluginID)
-        } else {
-            configurationStore.unregister(pluginID: pluginID)
-        }
+        configurationStore.removeData(pluginID: pluginID)
     }
 
     func plugin(id: PluginID) -> ManagedPlugin? {

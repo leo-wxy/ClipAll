@@ -1,5 +1,7 @@
 "use strict";
 
+var pluginID = "com.clipall.plugin.timestamp-tools";
+
 function pluginError(code, message) {
   throw { code: code, message: message };
 }
@@ -10,8 +12,8 @@ function pad(value, width) {
   return text;
 }
 
-function normalizedConfiguration(request) {
-  var configuration = request.configuration || {};
+function normalizedConfiguration() {
+  var configuration = App.getPluginEnv(pluginID);
   var timeZoneChoice = configuration.timeZone || "system";
   var displayFormat = configuration.displayFormat || "standard";
 
@@ -22,7 +24,9 @@ function normalizedConfiguration(request) {
     pluginError("invalid_configuration", "日期显示格式配置无效");
   }
 
-  var timeZone = timeZoneChoice === "utc" ? "UTC" : request.systemTimeZoneIdentifier;
+  var timeZone = timeZoneChoice === "utc"
+    ? "UTC"
+    : Intl.DateTimeFormat().resolvedOptions().timeZone;
   if (!timeZone || typeof timeZone !== "string") {
     pluginError("invalid_environment", "无法读取系统时区");
   }
@@ -240,8 +244,8 @@ function parseDateInput(text, timeZone) {
 }
 
 var ClipAllPlugin = {
-  timestampToDate: function (request) {
-    var text = String(request.text || "").trim();
+  timestampToDate: function (text) {
+    text = String(text || "").trim();
     var milliseconds;
     var unit;
 
@@ -258,7 +262,7 @@ var ClipAllPlugin = {
     var date = new Date(milliseconds);
     if (!Number.isFinite(date.getTime())) pluginError("out_of_range", "时间戳超出可显示范围");
 
-    var configuration = normalizedConfiguration(request);
+    var configuration = normalizedConfiguration();
     var zoneLabel = configuration.timeZoneChoice === "utc" ? "UTC" : "系统时区";
     var formatLabels = { standard: "标准", iso8601: "ISO 8601", chinese: "中文" };
 
@@ -284,9 +288,9 @@ var ClipAllPlugin = {
     };
   },
 
-  dateToTimestamp: function (request) {
-    var text = String(request.text || "").trim();
-    var configuration = normalizedConfiguration(request);
+  dateToTimestamp: function (text) {
+    text = String(text || "").trim();
+    var configuration = normalizedConfiguration();
     var parsed = parseDateInput(text, configuration.timeZone);
     var milliseconds = parsed.date.getTime();
     var seconds = Math.trunc(milliseconds / 1000);

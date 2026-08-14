@@ -13,7 +13,6 @@ struct PluginDebugFixture: Decodable, Identifiable, Sendable {
     let capabilityID: CapabilityID
     let input: String
     let configuration: [String: PluginRuntimeConfigurationValue]
-    let systemTimeZoneIdentifier: String?
     let expect: Expectation?
     let expectError: String?
 }
@@ -94,8 +93,7 @@ final class PluginDebugSession: ObservableObject {
             let execution = try await runnerClient.execute(request(
                 capability: capability,
                 text: input,
-                configuration: currentConfiguration(),
-                systemTimeZoneIdentifier: TimeZone.current.identifier
+                configuration: currentConfiguration()
             ))
             output = execution.response.output
             runtimeError = execution.response.error
@@ -135,8 +133,7 @@ final class PluginDebugSession: ObservableObject {
                 let execution = try await runnerClient.execute(request(
                     capability: capability,
                     text: fixture.input,
-                    configuration: fixture.configuration,
-                    systemTimeZoneIdentifier: fixture.systemTimeZoneIdentifier ?? "UTC"
+                    configuration: fixture.configuration
                 ))
                 results.append(verify(fixture: fixture, response: execution.response))
             } catch {
@@ -149,18 +146,16 @@ final class PluginDebugSession: ObservableObject {
     private func request(
         capability: ExternalCapabilityDefinition,
         text: String,
-        configuration: [String: PluginRuntimeConfigurationValue],
-        systemTimeZoneIdentifier: String
+        configuration: [String: PluginRuntimeConfigurationValue]
     ) -> PluginRuntimeRequest {
         PluginRuntimeRequest(
             script: package.script,
             sourceName: package.definition.runtimeEntry,
             handler: capability.handler,
             input: PluginRuntimeInput(
+                pluginID: package.definition.descriptor.id.rawValue,
                 text: text,
-                configuration: configuration,
-                localeIdentifier: Locale.current.identifier,
-                systemTimeZoneIdentifier: systemTimeZoneIdentifier
+                configuration: configuration
             ),
             capturesLogs: true
         )

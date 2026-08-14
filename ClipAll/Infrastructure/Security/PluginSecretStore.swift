@@ -81,6 +81,36 @@ final class PluginSecretStore: PluginSecretProviding {
         }
     }
 
+    func deleteSecrets(pluginID: PluginID) throws {
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+        ]
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return }
+        guard status == errSecSuccess else { throw SecretError.keychain(status) }
+
+        guard let items = result as? [[String: Any]] else {
+            throw SecretError.invalidData
+        }
+        for item in items {
+            guard let account = item[kSecAttrAccount as String] as? String,
+                  Self.account(account, belongsTo: pluginID) else { continue }
+            query = baseQuery(account: account)
+            let deleteStatus = SecItemDelete(query as CFDictionary)
+            guard deleteStatus == errSecSuccess || deleteStatus == errSecItemNotFound else {
+                throw SecretError.keychain(deleteStatus)
+            }
+        }
+    }
+
+    static func account(_ account: String, belongsTo pluginID: PluginID) -> Bool {
+        account.hasPrefix(pluginID.rawValue + ".")
+    }
+
     private func account(pluginID: PluginID, fieldID: String) -> String {
         "\(pluginID.rawValue).\(fieldID)"
     }

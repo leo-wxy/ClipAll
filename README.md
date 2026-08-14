@@ -71,8 +71,8 @@ Example.clipallplugin/
 时间工具示例位于 [`Plugins/Examples/TimestampTools.clipallplugin`](Plugins/Examples/TimestampTools.clipallplugin)，支持 Unix 时间戳、数字日期和中文日期双向转换。
 
 - [Plugin SDK](Docs/PluginSDK/README.md)
-- [Manifest v1](Docs/PluginSDK/manifest-v1.md)
-- [Runtime v1](Docs/PluginSDK/runtime-v1.md)
+- [Manifest v2](Docs/PluginSDK/manifest-v2.md)
+- [Runtime v2](Docs/PluginSDK/runtime-v2.md)
 - [插件调试](Docs/PluginSDK/debugging.md)
 
 ## 开发与验证

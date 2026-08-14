@@ -111,13 +111,10 @@ struct PluginsSettingsView: View {
             PluginUninstallConfirmationView(
                 plugin: plugin,
                 onCancel: { model.uninstallTarget = nil },
-                onConfirm: { removesConfiguration in
+                onConfirm: {
                     Task {
                         do {
-                            try await environment.pluginLifecycle.uninstall(
-                                pluginID: plugin.id,
-                                removesConfiguration: removesConfiguration
-                            )
+                            try await environment.pluginLifecycle.uninstall(pluginID: plugin.id)
                             model.uninstallTarget = nil
                         } catch {
                             model.errorMessage = error.localizedDescription
@@ -328,9 +325,12 @@ private struct PluginListRow: View {
 
     private var status: String {
         switch descriptor.source {
-        case .builtIn: "内置 · \(descriptor.version)"
-        case .installed: managed?.state == .disabled ? "已停用 · \(descriptor.version)" : "已安装 · \(descriptor.version)"
-        case .development: "开发中 · \(descriptor.version)"
+        case .builtIn, .development:
+            "v\(descriptor.version)"
+        case .installed:
+            managed?.state == .disabled
+                ? "v\(descriptor.version) · 已停用"
+                : "v\(descriptor.version) · 已启用"
         }
     }
 
@@ -338,7 +338,7 @@ private struct PluginListRow: View {
         switch descriptor.source {
         case .builtIn: "内置"
         case .development: "开发"
-        case .installed: managed?.state == .disabled ? "停用" : "启用"
+        case .installed: "本地"
         }
     }
 
@@ -411,16 +411,23 @@ private struct PluginSettingsDetail: View {
                 size: ClipAllTheme.Size.iconLarge
             )
             VStack(alignment: .leading, spacing: 3) {
-                Text(sourceLabel)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: ClipAllTheme.Spacing.xs) {
+                    Text(sourceLabel)
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(ClipAllTheme.quietFill, in: Capsule())
+                    Text("v\(descriptor.version)")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
                 Text(descriptor.name)
                     .font(.title3.weight(.semibold))
                 Text(descriptor.summary)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
-                Text("\(descriptor.id.rawValue) · v\(descriptor.version)")
+                Text(descriptor.id.rawValue)
                     .font(.caption.monospaced())
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
@@ -482,7 +489,7 @@ private struct PluginSettingsDetail: View {
                     HStack {
                         Button("卸载插件…", role: .destructive, action: onUninstall)
                         Spacer()
-                        Text("只删除 ClipAll 管理的安装副本")
+                        Text("安装副本、配置和密钥会一并删除")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -558,8 +565,8 @@ private struct PluginSettingsDetail: View {
 
     private var sourceLabel: String {
         switch descriptor.source {
-        case .builtIn: "CLIPALL 内置"
-        case .installed: "本地插件"
+        case .builtIn: "内置"
+        case .installed: "本地安装"
         case .development: "开发引用"
         }
     }
@@ -648,34 +655,23 @@ private struct PluginInstallationConfirmationView: View {
 private struct PluginUninstallConfirmationView: View {
     let plugin: ManagedPlugin
     let onCancel: () -> Void
-    let onConfirm: (Bool) -> Void
-
-    @StateObject private var model = PluginUninstallConfirmationModel()
+    let onConfirm: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("卸载“\(plugin.package.definition.descriptor.name)”？")
                 .font(.title2.weight(.semibold))
-            Text("插件能力会立即从固定项、推荐和搜索中移除。最初导入的源包不会被修改。")
-                .foregroundStyle(.secondary)
-            Toggle("同时删除插件配置", isOn: $model.removesConfiguration)
-            Text(model.removesConfiguration ? "时区、显示格式等配置也会删除。" : "配置会保留，重新安装后可继续使用。")
-                .font(.caption)
+            Text("插件能力、配置和密钥会一并删除。最初导入的源包不会被修改。")
                 .foregroundStyle(.secondary)
             HStack {
                 Spacer()
                 Button("取消", action: onCancel)
                     .keyboardShortcut(.cancelAction)
-                Button("卸载", role: .destructive) { onConfirm(model.removesConfiguration) }
+                Button("卸载", role: .destructive, action: onConfirm)
                     .keyboardShortcut(.defaultAction)
             }
         }
         .padding(24)
         .frame(width: 430)
     }
-}
-
-@MainActor
-private final class PluginUninstallConfirmationModel: ObservableObject {
-    @Published var removesConfiguration = false
 }

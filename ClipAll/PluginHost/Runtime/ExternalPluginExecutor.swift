@@ -10,17 +10,13 @@ final class ExternalPluginExecutor: CapabilityExecuting {
     private let sourceName: String
     private let configurationStore: PluginConfigurationStore
     private let runnerClient: PluginRunnerClient
-    private let localeIdentifier: @Sendable () -> String
-    private let timeZoneIdentifier: @Sendable () -> String
 
     init(
         definition: ExternalCapabilityDefinition,
         script: String,
         sourceName: String,
         configurationStore: PluginConfigurationStore,
-        runnerClient: PluginRunnerClient,
-        localeIdentifier: @escaping @Sendable () -> String = { Locale.current.identifier },
-        timeZoneIdentifier: @escaping @Sendable () -> String = { TimeZone.current.identifier }
+        runnerClient: PluginRunnerClient
     ) {
         descriptor = definition.descriptor
         handler = definition.handler
@@ -28,8 +24,6 @@ final class ExternalPluginExecutor: CapabilityExecuting {
         self.sourceName = sourceName
         self.configurationStore = configurationStore
         self.runnerClient = runnerClient
-        self.localeIdentifier = localeIdentifier
-        self.timeZoneIdentifier = timeZoneIdentifier
     }
 
     func availability(for context: SelectionContext) -> CapabilityAvailability {
@@ -52,10 +46,9 @@ final class ExternalPluginExecutor: CapabilityExecuting {
             sourceName: sourceName,
             handler: handler,
             input: PluginRuntimeInput(
+                pluginID: descriptor.pluginID.rawValue,
                 text: context.normalizedText,
-                configuration: runtimeConfiguration(),
-                localeIdentifier: localeIdentifier(),
-                systemTimeZoneIdentifier: timeZoneIdentifier()
+                configuration: runtimeConfiguration()
             ),
             capturesLogs: false
         )

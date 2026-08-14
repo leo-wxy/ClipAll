@@ -84,8 +84,8 @@ flowchart LR
 | 类型 | 位置 | 执行方式 | 权限 | 可卸载 |
 |---|---|---|---|---|
 | 内置插件 | `ClipAll/BuiltInPlugins` | 主进程原生 Swift | 由宿主明确注入 | 否 |
-| 已安装外置插件 | Application Support/Plugins/Installed | runner 内 JavaScriptCore | v1 为零宿主权限 | 是 |
-| 开发插件 | 用户选择的源码目录 | runner 内 JavaScriptCore | v1 为零宿主权限 | 移除引用，不删源码 |
+| 已安装外置插件 | Application Support/Plugins/Installed | runner 内 JavaScriptCore | v2 为零宿主权限 | 是 |
+| 开发插件 | 用户选择的源码目录 | runner 内 JavaScriptCore | v2 为零宿主权限 | 移除引用，不删源码 |
 
 时间工具属于外置插件。仓库中的 `Plugins/Examples/TimestampTools.clipallplugin` 既是可导入示例，也是 SDK 的端到端契约测试对象；主 App 中不得另写一套时间转换执行器。
 
@@ -95,14 +95,14 @@ flowchart LR
 
 - 全局设置：`SettingsStore`，包括启停、固定顺序、最近使用、快捷键和开发者模式。
 - 插件非敏感配置：`PluginConfigurationStore`，按 `pluginID + fieldID` 隔离。
-- 内置插件 secret：`PluginSecretStore` / Keychain。外置 manifest v1 不支持 secret。
+- 内置插件 secret：`PluginSecretStore` / Keychain。外置 manifest v2 不支持 secret。
 - 插件运行文件：`PluginInstallationStore` 管理的 Application Support 目录。
 - 选中文字：只存在于当前 `SelectionContext` 与一次 runner request，不落盘。
 
 ## 变更规则
 
 - 修改 manifest 或 runner JSON 字段时，必须同步更新 Swift DTO、JSON Schema、SDK 文档、时间工具示例和兼容测试。
-- v1 字段语义不能静默改变；不兼容变更提升 `manifestVersion` 或 `protocolVersion`。
+- v2 字段语义不能静默改变；不兼容变更提升 `manifestVersion` 或 `protocolVersion`。
 - 新宿主能力不能直接暴露给脚本。先设计权限、用户授权、最小 API 和独立威胁模型。
 - 插件注册与注销按 plugin ID 原子发生，UI 不应观察到只加载一部分能力的状态。
 

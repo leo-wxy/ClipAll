@@ -6,8 +6,33 @@ import OSLog
 private let clipAllHotKeySignature: OSType = 0x434C_5041 // "CLPA"
 private let clipAllHotKeyIdentifier: UInt32 = 1
 
-private let clipAllHotKeyHandler: EventHandlerUPP = { _, _, userData in
-    guard let userData else { return OSStatus(eventNotHandledErr) }
+func matchesClipAllHotKeyEvent(
+    _ event: EventRef?,
+    signature: OSType,
+    identifier: UInt32
+) -> Bool {
+    guard let event else { return false }
+    var hotKeyID = EventHotKeyID()
+    let status = GetEventParameter(
+        event,
+        EventParamName(kEventParamDirectObject),
+        EventParamType(typeEventHotKeyID),
+        nil,
+        MemoryLayout<EventHotKeyID>.size,
+        nil,
+        &hotKeyID
+    )
+    return status == noErr
+        && hotKeyID.signature == signature
+        && hotKeyID.id == identifier
+}
+
+private let clipAllHotKeyHandler: EventHandlerUPP = { _, event, userData in
+    guard matchesClipAllHotKeyEvent(
+        event,
+        signature: clipAllHotKeySignature,
+        identifier: clipAllHotKeyIdentifier
+    ), let userData else { return OSStatus(eventNotHandledErr) }
     let monitor = Unmanaged<SelectionMonitor>.fromOpaque(userData).takeUnretainedValue()
     Task { @MainActor in
         monitor.handleRegisteredHotKey()

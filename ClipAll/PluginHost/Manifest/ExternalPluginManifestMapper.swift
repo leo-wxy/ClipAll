@@ -40,8 +40,12 @@ struct ExternalPluginManifestMapper: Sendable {
     }
 
     func map(_ manifest: ExternalPluginManifest, source: PluginSource) throws -> ExternalPluginDefinition {
-        guard manifest.manifestVersion == 1 else {
-            throw issue("manifest_version", "不支持 manifestVersion \(manifest.manifestVersion)", "$.manifestVersion")
+        guard manifest.manifestVersion == 2 else {
+            throw issue(
+                "manifest_version",
+                "不支持 manifestVersion \(manifest.manifestVersion)，当前要求 2",
+                "$.manifestVersion"
+            )
         }
         guard source.isExternal else {
             throw issue("invalid_source", "外置 manifest 不能注册为内置插件")
@@ -65,7 +69,7 @@ struct ExternalPluginManifestMapper: Sendable {
         try validateDisplayString(manifest.summary, maximum: 240, location: "$.summary")
         try validateSymbol(manifest.symbolName, location: "$.symbolName")
         guard manifest.runtime.kind == .javascriptCore else {
-            throw issue("unsupported_runtime", "外置插件 v1 只支持 JavaScriptCore")
+            throw issue("unsupported_runtime", "外置插件 v2 只支持 JavaScriptCore")
         }
         try validateEntry(manifest.runtime.entry)
 
@@ -199,7 +203,7 @@ struct ExternalPluginManifestMapper: Sendable {
             try validateSymbol(capability.symbolName, location: "\(path).symbolName")
             try validateHandler(capability.handler, location: "\(path).handler")
             guard capability.executionKind == .resultPanel else {
-                throw issue("unsupported_execution", "外置插件 v1 只支持 resultPanel", "\(path).executionKind")
+                throw issue("unsupported_execution", "外置插件 v2 只支持 resultPanel", "\(path).executionKind")
             }
 
             let supportedKinds = Set(capability.supportedContentKinds)

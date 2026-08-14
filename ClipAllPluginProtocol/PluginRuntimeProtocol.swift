@@ -1,7 +1,7 @@
 import Foundation
 
 public enum PluginRuntimeLimits {
-    public static let protocolVersion = 1
+    public static let protocolVersion = 2
     public static let maximumRequestBytes = 1_500_000
     public static let maximumResponseBytes = 256_000
     public static let maximumSelectionBytes = 65_536
@@ -46,21 +46,18 @@ extension PluginRuntimeConfigurationValue: Codable {
 }
 
 public struct PluginRuntimeInput: Codable, Equatable, Sendable {
+    public let pluginID: String
     public let text: String
     public let configuration: [String: PluginRuntimeConfigurationValue]
-    public let localeIdentifier: String
-    public let systemTimeZoneIdentifier: String
 
     public init(
+        pluginID: String,
         text: String,
-        configuration: [String: PluginRuntimeConfigurationValue],
-        localeIdentifier: String,
-        systemTimeZoneIdentifier: String
+        configuration: [String: PluginRuntimeConfigurationValue]
     ) {
+        self.pluginID = pluginID
         self.text = text
         self.configuration = configuration
-        self.localeIdentifier = localeIdentifier
-        self.systemTimeZoneIdentifier = systemTimeZoneIdentifier
     }
 }
 

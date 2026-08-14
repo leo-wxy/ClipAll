@@ -24,13 +24,18 @@ struct JavaScriptPluginRuntime {
             capturedException = exception
         }
 
-        guard let inputObject = makeJSONObject(request.input),
-              let inputValue = JSValue(object: inputObject, in: context) else {
+        let installer = context.evaluateScript(Self.bootstrapScript)
+        if let exception = takeException(&capturedException) {
+            return .failure(errorPayload(from: exception, includesDetails: request.capturesLogs))
+        }
+        guard let installer,
+              installer.isObject,
+              let configurationObject = makeJSONObject(request.input.configuration),
+              let configurationValue = JSValue(object: configurationObject, in: context) else {
             return .failure(.init(code: "invalid_request", message: "无法准备插件输入"))
         }
-        context.setObject(inputValue, forKeyedSubscript: "__clipallRequest" as NSString)
 
-        context.evaluateScript(Self.bootstrapScript)
+        installer.call(withArguments: [request.input.pluginID, configurationValue])
         if let exception = takeException(&capturedException) {
             return .failure(errorPayload(from: exception, includesDetails: request.capturesLogs))
         }
@@ -56,7 +61,7 @@ struct JavaScriptPluginRuntime {
             )
         }
 
-        let value = handler.call(withArguments: [inputValue])
+        let value = handler.call(withArguments: [request.input.text])
         if let exception = takeException(&capturedException) {
             return .failure(
                 errorPayload(from: exception, includesDetails: request.capturesLogs),
@@ -160,36 +165,62 @@ struct JavaScriptPluginRuntime {
     private static let bootstrapScript = #"""
     (function (global) {
       "use strict";
-      var logs = [];
-      function append(level, values) {
-        var text = Array.prototype.map.call(values, function (value) {
-          try {
-            return typeof value === "string" ? value : JSON.stringify(value);
-          } catch (_) {
-            return String(value);
+      return function (pluginID, configuration) {
+        var logs = [];
+        function append(level, values) {
+          var text = Array.prototype.map.call(values, function (value) {
+            try {
+              return typeof value === "string" ? value : JSON.stringify(value);
+            } catch (_) {
+              return String(value);
+            }
+          }).join(" ");
+          logs.push(level + ": " + text);
+        }
+        function deepFreeze(value) {
+          if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+          Object.getOwnPropertyNames(value).forEach(function (name) {
+            deepFreeze(value[name]);
+          });
+          return Object.freeze(value);
+        }
+        var environment = deepFreeze(configuration || {});
+        var memoryConsole = Object.freeze({
+          log: function () { append("log", arguments); },
+          warn: function () { append("warn", arguments); },
+          error: function () { append("error", arguments); }
+        });
+        var app = Object.freeze({
+          getPluginEnv: function (requestedPluginID) {
+            if (typeof requestedPluginID !== "string" ||
+                requestedPluginID.length === 0 ||
+                requestedPluginID !== pluginID) {
+              var error = new Error("插件 ID 不匹配");
+              Object.defineProperty(error, "code", { value: "invalid_plugin_id" });
+              throw error;
+            }
+            return environment;
           }
-        }).join(" ");
-        logs.push(level + ": " + text);
-      }
-      var memoryConsole = Object.freeze({
-        log: function () { append("log", arguments); },
-        warn: function () { append("warn", arguments); },
-        error: function () { append("error", arguments); }
-      });
-      Object.defineProperty(global, "console", {
-        value: memoryConsole,
-        configurable: false,
-        enumerable: true,
-        writable: false
-      });
-      Object.defineProperty(global, "__clipallTakeLogs", {
-        value: function () { return logs.slice(); },
-        configurable: false,
-        enumerable: false,
-        writable: false
-      });
-      if (__clipallRequest.configuration) Object.freeze(__clipallRequest.configuration);
-      Object.freeze(__clipallRequest);
+        });
+        Object.defineProperty(global, "console", {
+          value: memoryConsole,
+          configurable: false,
+          enumerable: true,
+          writable: false
+        });
+        Object.defineProperty(global, "App", {
+          value: app,
+          configurable: false,
+          enumerable: true,
+          writable: false
+        });
+        Object.defineProperty(global, "__clipallTakeLogs", {
+          value: function () { return logs.slice(); },
+          configurable: false,
+          enumerable: false,
+          writable: false
+        });
+      };
     })(globalThis);
     """#
 }

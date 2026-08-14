@@ -17,6 +17,7 @@ private enum OverlayStateVerificationError: Error, CustomStringConvertible {
 enum OverlayStateVerification {
     static func main() async throws {
         try verifyPlacement()
+        try verifyCarbonHotKeyIdentity()
         try verifyPointerSelectionGesture()
         try verifySelectionAutomaticDisplayPolicies()
         try await verifySelectionMonitorPolicyGate()
@@ -25,6 +26,56 @@ enum OverlayStateVerification {
         try verifyApplicationEntryVisibilityPersistence()
         try await verifyClipboardSelectionFallback()
         print("Overlay state verification passed")
+    }
+
+    private static func verifyCarbonHotKeyIdentity() throws {
+        let expectedSignature: OSType = 0x434C_4F56
+        let expectedIdentifier: UInt32 = 1
+        var event: EventRef?
+        let createStatus = CreateEvent(
+            nil,
+            OSType(kEventClassKeyboard),
+            UInt32(kEventHotKeyPressed),
+            GetCurrentEventTime(),
+            EventAttributes(kEventAttributeNone),
+            &event
+        )
+        guard createStatus == noErr, let event else {
+            throw OverlayStateVerificationError.failed("无法创建 Carbon 热键验证事件")
+        }
+        defer { ReleaseEvent(event) }
+
+        var identifier = EventHotKeyID(
+            signature: expectedSignature,
+            id: expectedIdentifier
+        )
+        let setStatus = SetEventParameter(
+            event,
+            EventParamName(kEventParamDirectObject),
+            EventParamType(typeEventHotKeyID),
+            MemoryLayout<EventHotKeyID>.size,
+            &identifier
+        )
+        guard setStatus == noErr else {
+            throw OverlayStateVerificationError.failed("无法写入 Carbon 热键验证 ID")
+        }
+
+        try expect(
+            matchesClipAllHotKeyEvent(
+                event,
+                signature: expectedSignature,
+                identifier: expectedIdentifier
+            ),
+            "Carbon 热键应只匹配自己的 signature 与 identifier"
+        )
+        try expect(
+            !matchesClipAllHotKeyEvent(
+                event,
+                signature: 0x434C_5041,
+                identifier: expectedIdentifier
+            ),
+            "Esc 热键不能被取词快捷键处理器接收"
+        )
     }
 
     private static func verifyClipboardSelectionFallback() async throws {

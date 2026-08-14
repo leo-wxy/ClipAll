@@ -11,6 +11,7 @@ private enum PluginLifecycleVerificationError: Error, CustomStringConvertible {
 }
 
 @main
+@MainActor
 enum PluginLifecycleVerification {
     static func main() async throws {
         guard CommandLine.arguments.count == 2 else {
@@ -171,7 +172,60 @@ enum PluginLifecycleVerification {
             try expect(error == .unknownPreparation, "discard 后应返回 unknownPreparation")
         }
 
-        try await store.uninstall(pluginID: .timestampTools)
+        let suite = "ClipAll.PluginLifecycleVerification.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            throw PluginLifecycleVerificationError.failed("无法创建隔离 UserDefaults")
+        }
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let registry = CapabilityRegistry()
+        let settings = SettingsStore(defaults: defaults)
+        let configuration = PluginConfigurationStore(defaults: defaults)
+        var shouldFailSecretDeletion = true
+        var deletedSecretPluginIDs: [PluginID] = []
+        let lifecycle = PluginLifecycleController(
+            installationStore: store,
+            registry: registry,
+            settings: settings,
+            configurationStore: configuration,
+            runnerClient: PluginRunnerClient(runnerURL: URL(fileURLWithPath: "/usr/bin/false")),
+            developmentStore: DevelopmentPluginStore(defaults: defaults),
+            deletePluginSecrets: { pluginID in
+                deletedSecretPluginIDs.append(pluginID)
+                if shouldFailSecretDeletion {
+                    throw PluginLifecycleVerificationError.failed("模拟 Keychain 删除失败")
+                }
+            }
+        )
+        await lifecycle.loadInstalled()
+        try expect(lifecycle.plugin(id: .timestampTools) != nil, "controller 应载入已安装插件")
+        try configuration.set(.string("utc"), pluginID: .timestampTools, fieldID: "timeZone")
+
+        do {
+            try await lifecycle.uninstall(pluginID: .timestampTools)
+            throw PluginLifecycleVerificationError.failed("Keychain 删除失败时卸载必须失败")
+        } catch PluginLifecycleVerificationError.failed("模拟 Keychain 删除失败") {
+            // Expected.
+        }
+        try expect(lifecycle.plugin(id: .timestampTools) != nil, "失败卸载不得移除 managed state")
+        try expect(registry.plugin(for: .timestampTools) != nil, "失败卸载不得注销 registry")
+        try expect(
+            configuration.string(pluginID: .timestampTools, fieldID: "timeZone") == "utc",
+            "失败卸载不得清除普通配置"
+        )
+        _ = try await store.validateInstalled(pluginID: .timestampTools)
+
+        shouldFailSecretDeletion = false
+        try await lifecycle.uninstall(pluginID: .timestampTools)
+        try expect(
+            deletedSecretPluginIDs == [.timestampTools, .timestampTools],
+            "卸载应按精确 pluginID 清理 Keychain"
+        )
+        try expect(lifecycle.plugin(id: .timestampTools) == nil, "卸载后不应保留 managed state")
+        try expect(registry.plugin(for: .timestampTools) == nil, "卸载后不应保留 registry")
+        try expect(configuration.value(pluginID: .timestampTools, fieldID: "timeZone") == nil, "卸载应清除普通配置")
+        try expect(settings.pluginEnabledStates[.timestampTools] == nil, "卸载应清除启停状态")
+
         let uninstallStagingEmpty = try stagingIsEmpty(root)
         try expect(uninstallStagingEmpty, "卸载成功后不应残留 staging")
         let loadedAfterUninstall = try await store.loadInstalled()

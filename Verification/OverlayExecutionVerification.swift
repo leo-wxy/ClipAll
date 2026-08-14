@@ -88,8 +88,106 @@ private enum OverlayExecutionVerification {
             settings.recentCapabilityIDs.first == executor.descriptor.id,
             "外部能力成功后应记录最近使用"
         )
+        try verifyConfigurationStore(configuration)
 
         print("Overlay execution verification passed")
+    }
+
+    private static func verifyConfigurationStore(_ store: PluginConfigurationStore) throws {
+        let pluginID: PluginID = "verification.configuration"
+        let otherPluginID: PluginID = "verification.configuration.other"
+        let timeZone = PluginConfigurationField(
+            id: "timeZone",
+            title: "时区",
+            kind: .choice(options: [
+                .init(id: "system", title: "系统"),
+                .init(id: "utc", title: "UTC"),
+            ]),
+            defaultValue: .string("system")
+        )
+        let enabled = PluginConfigurationField(
+            id: "enabled",
+            title: "启用",
+            kind: .toggle,
+            defaultValue: .bool(true)
+        )
+        let secret = PluginConfigurationField(
+            id: "apiKey",
+            title: "API Key",
+            kind: .secret(placeholder: nil),
+            defaultValue: .string("")
+        )
+        store.register(descriptor(id: pluginID, fields: [timeZone, enabled, secret]))
+        try expect(
+            store.resolvedValues(pluginID: pluginID) == [
+                "timeZone": .string("system"),
+                "enabled": .bool(true),
+            ],
+            "resolved 配置应合并默认值并过滤 secret"
+        )
+
+        try store.set(.string("utc"), pluginID: pluginID, fieldID: "timeZone")
+        try expect(store.bool(pluginID: pluginID, fieldID: "enabled"), "单字段更新不得覆盖 sibling")
+        try expectStoreError(.invalidValue(fieldID: "enabled")) {
+            try store.set(.string("true"), pluginID: pluginID, fieldID: "enabled")
+        }
+        try expectStoreError(.unknownField(pluginID: pluginID, fieldID: "missing")) {
+            try store.set(.string("value"), pluginID: pluginID, fieldID: "missing")
+        }
+        try expectStoreError(.secretRequiresKeychain(fieldID: "apiKey")) {
+            try store.set(.string("secret"), pluginID: pluginID, fieldID: "apiKey")
+        }
+
+        store.register(descriptor(id: otherPluginID, fields: [enabled]))
+        try store.set(.bool(false), pluginID: otherPluginID, fieldID: "enabled")
+        try expect(store.bool(pluginID: pluginID, fieldID: "enabled"), "pluginID 之间必须隔离")
+
+        store.unregister(pluginID: pluginID)
+        store.register(descriptor(id: pluginID, fields: [enabled]))
+        try expect(
+            store.resolvedValues(pluginID: pluginID) == ["enabled": .bool(true)],
+            "重载或升级应保留现有字段并过滤 stale 字段"
+        )
+
+        store.removeData(pluginID: pluginID)
+        try expect(store.resolvedValues(pluginID: pluginID).isEmpty, "remove 应清空插件配置")
+        try expect(store.value(pluginID: pluginID, fieldID: "enabled") == nil, "remove 不得留下持久值")
+
+        try expect(
+            PluginSecretStore.account("verification.configuration.token", belongsTo: pluginID),
+            "Keychain account 应匹配精确 pluginID 前缀"
+        )
+        try expect(
+            !PluginSecretStore.account("verification.configuration-other.token", belongsTo: pluginID),
+            "相似 pluginID 不得被误删"
+        )
+    }
+
+    private static func descriptor(
+        id: PluginID,
+        fields: [PluginConfigurationField]
+    ) -> PluginDescriptor {
+        PluginDescriptor(
+            id: id,
+            name: "验证插件",
+            summary: "配置验证",
+            symbolName: "gearshape",
+            version: "1.0.0",
+            source: .development,
+            configurationFields: fields
+        )
+    }
+
+    private static func expectStoreError(
+        _ expected: PluginConfigurationStore.StoreError,
+        operation: () throws -> Void
+    ) throws {
+        do {
+            try operation()
+            throw OverlayExecutionVerificationError.failed("期望配置写入失败：\(expected)")
+        } catch let error as PluginConfigurationStore.StoreError {
+            try expect(error == expected, "配置写入错误不匹配：\(error)")
+        }
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://clipall.local/schemas/plugin-manifest-v1.schema.json",
-  "title": "ClipAll Plugin Manifest v1",
+  "$id": "https://clipall.local/schemas/plugin-manifest-v2.schema.json",
+  "title": "ClipAll Plugin Manifest v2",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -17,7 +17,7 @@
     "capabilities"
   ],
   "properties": {
-    "manifestVersion": { "const": 1 },
+    "manifestVersion": { "const": 2 },
     "id": { "$ref": "#/$defs/pluginIdentifier" },
     "name": { "$ref": "#/$defs/nonEmptyDisplayString" },
     "version": { "$ref": "#/$defs/semanticVersion" },

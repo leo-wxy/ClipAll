@@ -21,6 +21,7 @@ enum CoreVerification {
             source: .installed
         )
         try verifyExternalPlugin(package)
+        try verifyManifestV1IsRejected(package.packageURL)
         try verifyTimestampRouting(package)
         try verifyMatcherCompatibility()
         try verifyDiscoveryBounds()
@@ -43,6 +44,25 @@ enum CoreVerification {
         let declaredFormats = dateCapability?.descriptor.routingRules.flatMap(\.inputMatchers).flatMap(\.formats) ?? []
         try expect(declaredFormats.contains("yyyy年M月d日"), "日期能力应由 manifest 声明中文输入格式")
         try expect(declaredFormats.contains("yyyy/MM/dd"), "manifest 格式应覆盖插件可执行的斜杠日期")
+    }
+
+    private static func verifyManifestV1IsRejected(_ packageURL: URL) throws {
+        let manifestURL = packageURL.appendingPathComponent("plugin.json")
+        var manifest = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: manifestURL)
+        ) as! [String: Any]
+        manifest["manifestVersion"] = 1
+        let decoded = try ExternalPluginManifestDecoder().decode(
+            JSONSerialization.data(withJSONObject: manifest)
+        )
+
+        do {
+            _ = try ExternalPluginManifestMapper().map(decoded, source: .installed)
+            throw VerificationError.failed("manifest v1 必须被拒绝")
+        } catch let issue as PluginValidationIssue {
+            try expect(issue.code == "manifest_version", "manifest v1 应返回 manifest_version")
+            try expect(issue.location == "$.manifestVersion", "manifest v1 应定位到 manifestVersion")
+        }
     }
 
     private static func verifyTimestampRouting(_ package: ValidatedExternalPluginPackage) throws {

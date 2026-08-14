@@ -130,7 +130,7 @@ struct ExternalPluginManifestDecoder: Sendable {
              let .valueNotFound(_, value):
             context = value
         @unknown default:
-            return PluginValidationIssue(code: "manifest_schema", message: "plugin.json 不符合 v1 schema")
+            return PluginValidationIssue(code: "manifest_schema", message: "plugin.json 不符合 v2 schema")
         }
 
         let location = context.codingPath.reduce("$") { partial, key in

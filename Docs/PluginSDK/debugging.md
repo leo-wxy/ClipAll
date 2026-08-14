@@ -37,7 +37,7 @@
 ]
 ```
 
-fixture 使用已校验插件包中的同一 handler 和 runner，不允许导入宿主测试代码。每个 case 的 `configuration` 会直接作为运行配置发送，因此字段和值必须与 manifest 自行保持一致。对系统时区敏感的 case 应显式设置配置和期望环境。
+fixture 使用已校验插件包中的同一 handler 和 runner，不允许导入宿主测试代码。每个 case 的 `configuration` 会成为本次只读 environment，因此字段和值必须与 manifest 自行保持一致。system 时区 case 使用标准 JavaScript 环境，不写宿主时区字段，也不硬编码其他机器的 IANA 时区。
 
 ## 常见失败
 
