@@ -126,10 +126,13 @@ final class AppEnvironment: ObservableObject {
             .store(in: &cancellables)
         settings.$isDockIconVisible
             .removeDuplicates()
-            .sink { isVisible in
-                Task { @MainActor in
-                    NSApplication.shared.setActivationPolicy(isVisible ? .regular : .accessory)
-                }
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in self?.synchronizeDockVisibility() }
+            }
+            .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: NSApplication.didFinishLaunchingNotification)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in self?.synchronizeDockVisibility() }
             }
             .store(in: &cancellables)
         settings.$globalShortcut
@@ -217,6 +220,12 @@ final class AppEnvironment: ObservableObject {
         }
         Self.logger.notice("Selection monitoring requested")
         selectionMonitor.start()
+    }
+
+    private func synchronizeDockVisibility() {
+        NSApplication.shared.setActivationPolicy(
+            settings.isDockIconVisible ? .regular : .accessory
+        )
     }
 
     private static func defaultApplicationSupportURL() -> URL {
