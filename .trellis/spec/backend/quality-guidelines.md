@@ -247,6 +247,9 @@ SelectionMonitor.capturePointerSelection(
 - Apply the automatic display policy before AX or clipboard work. Re-check the
   frontmost bundle after the settle delay and after capture; if it differs from
   the mouse-up source, invalidate without publishing the new App's selection.
+- For multi-click AX results with selection bounds, require the trigger point to
+  intersect those bounds with the existing drag-distance tolerance. A focused
+  element may retain a stale non-empty AX selection after the user clicks elsewhere.
 - For multi-click, an empty hit path means AX cannot classify the surface; it
   may continue to the existing constrained clipboard fallback.
 - Any blocking role/action rejects fallback. Scan the complete bounded path so
@@ -277,6 +280,7 @@ SelectionMonitor.capturePointerSelection(
 | App policy is `disabled` | Reject every pointer trigger; allow hotkey/menu capture |
 | Frontmost App changes during settle/capture | Invalidate; publish nothing from the new App |
 | AX selection succeeds | Publish AX selection; do not send copy |
+| Multi-click AX bounds do not contain the trigger point | Invalidate as a stale focused selection |
 | Drag + fallback-eligible AX failure | Try constrained clipboard fallback |
 | Multi-click + empty AX hit path | Try constrained clipboard fallback |
 | Multi-click + text path | Try constrained clipboard fallback |
@@ -315,6 +319,8 @@ SelectionMonitor.capturePointerSelection(
     sanitization remain stable;
   - policy rejection invokes no capture, source switching invalidates, and
     hotkey/menu capture bypasses the pointer policy;
+  - multi-click publishes AX bounds that contain the trigger point and rejects
+    stale AX bounds elsewhere;
   - a private native flavor is restored byte-for-byte after successful fallback;
   - file/image/dynamic-object clipboard payloads remain rejected and snapshots
     retain their existing restoration and concurrency behavior.

@@ -714,6 +714,49 @@ enum OverlayStateVerification {
             policyCallCount == pointerPolicyCalls,
             "菜单和快捷键不得调用鼠标自动显示策略"
         )
+
+        let selectionCountBeforeBoundedSelection = selectionCount
+        capture.selectionBounds = CGRect(
+            x: -1_000_000,
+            y: -1_000_000,
+            width: 2_000_000,
+            height: 2_000_000
+        )
+        monitor.capturePointerSelection(
+            .multiClick,
+            sourceBundleIdentifier: bundleSource.value,
+            after: .zero,
+            requiresRunning: false
+        )
+        try await waitUntil("命中范围的 AX 选区未被捕获") { capture.callCount == 4 }
+        try expect(
+            selectionCount == selectionCountBeforeBoundedSelection + 1,
+            "双击点命中 AX 选区范围时仍应发布选区"
+        )
+
+        let selectionCountBeforeStaleSelection = selectionCount
+        let invalidationCountBeforeStaleSelection = invalidationCount
+        capture.selectionBounds = CGRect(
+            x: 1_000_000,
+            y: 1_000_000,
+            width: 20,
+            height: 20
+        )
+        monitor.capturePointerSelection(
+            .multiClick,
+            sourceBundleIdentifier: bundleSource.value,
+            after: .zero,
+            requiresRunning: false
+        )
+        try await waitUntil("残留 AX 选区未进入发布门禁") { capture.callCount == 5 }
+        try expect(
+            selectionCount == selectionCountBeforeStaleSelection,
+            "双击点未命中 AX 选区范围时不得发布残留选区"
+        )
+        try expect(
+            invalidationCount == invalidationCountBeforeStaleSelection + 1,
+            "拒绝残留 AX 选区时应关闭旧浮窗"
+        )
     }
 
     private static func waitUntil(
@@ -982,6 +1025,7 @@ private final class VerificationSelectionCapture: SelectionCapturing {
     private(set) var callCount = 0
     private(set) var fallbackPolicies: [SelectionFallbackPolicy] = []
     var sourceBundleIdentifier: String?
+    var selectionBounds: CGRect?
 
     func captureCurrentSelection(
         triggerLocation: CGPoint,
@@ -992,6 +1036,7 @@ private final class VerificationSelectionCapture: SelectionCapturing {
         return SelectionContext(
             text: "selected",
             sourceBundleIdentifier: sourceBundleIdentifier,
+            selectionBounds: selectionBounds,
             triggerLocation: triggerLocation
         )!
     }

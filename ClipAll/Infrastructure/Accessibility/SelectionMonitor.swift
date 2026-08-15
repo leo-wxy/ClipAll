@@ -366,6 +366,19 @@ final class SelectionMonitor {
             )
             return false
         }
+        if intent == .multiClick,
+           let context,
+           let selectionBounds = context.selectionBounds,
+           !selectionBounds.insetBy(
+               dx: -PointerSelectionGesture.minimumDragDistance,
+               dy: -PointerSelectionGesture.minimumDragDistance
+           ).contains(context.triggerLocation) {
+            onSelectionInvalidated()
+            Self.logger.info(
+                "Selection capture suppressed: trigger=pointer-multiClick, bundleIdentifier=\(currentBundleIdentifier ?? "unknown", privacy: .public), reason=selectionOutsideTrigger"
+            )
+            return false
+        }
         return true
     }
 
