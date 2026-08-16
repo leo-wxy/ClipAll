@@ -13,12 +13,6 @@ struct ClipAllApp: App {
             MenuBarStatusIcon(settings: environment.settings)
         }
 
-        Window("能力中心", id: "capability-center") {
-            CapabilityCenterView(environment: environment)
-        }
-        .defaultSize(width: 860, height: 580)
-        .windowResizability(.contentMinSize)
-
         Window("ClipAll 设置", id: "settings") {
             SettingsRootView(environment: environment)
         }
@@ -83,12 +77,6 @@ private struct MenuBarContent: View {
         }
 
         Divider()
-
-        Button("能力中心…") {
-            NSApplication.shared.activate(ignoringOtherApps: true)
-            openWindow(id: "capability-center")
-        }
-        .keyboardShortcut("k", modifiers: [.command, .shift])
 
         Button("设置…") {
             bringSettingsToFront()

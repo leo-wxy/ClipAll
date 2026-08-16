@@ -8,13 +8,16 @@ struct PluginConfigurationForm: View {
 
     var body: some View {
         if descriptor.configurationFields.isEmpty {
-            Text("这个插件没有配置项。")
-                .foregroundStyle(.secondary)
+            ClipAllEmptyState(
+                title: "无需配置",
+                systemImage: "checkmark.circle",
+                message: "这个插件安装后即可使用。",
+                minimumHeight: 80
+            )
         } else {
-            VStack(spacing: 0) {
-                ForEach(Array(visibleFields.enumerated()), id: \.element.id) { index, field in
+            VStack(spacing: ClipAllTheme.Spacing.xs) {
+                ForEach(visibleFields) { field in
                     fieldView(field)
-                    if index < visibleFields.count - 1 { Divider() }
                 }
             }
         }
@@ -28,40 +31,83 @@ struct PluginConfigurationForm: View {
 
     @ViewBuilder
     private func fieldView(_ field: PluginConfigurationField) -> some View {
-        HStack(alignment: .center, spacing: ClipAllTheme.Spacing.lg) {
-            VStack(alignment: .leading, spacing: 4) {
+        ClipAllSettingsRow(alignment: .top, minimumHeight: 68) {
+            VStack(alignment: .leading, spacing: ClipAllTheme.Spacing.xxs) {
                 Text(field.title)
-                    .font(.callout.weight(.semibold))
+                    .font(ClipAllTheme.Typography.body.weight(.semibold))
+                    .foregroundStyle(ClipAllTheme.textPrimary)
                 if let summary = field.summary {
                     Text(summary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(ClipAllTheme.Typography.supporting)
+                        .foregroundStyle(ClipAllTheme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .frame(maxWidth: 230, alignment: .leading)
-
-            Spacer(minLength: ClipAllTheme.Spacing.md)
-
+            .frame(
+                minWidth: 140,
+                idealWidth: 190,
+                maxWidth: ClipAllTheme.Size.formLabel,
+                alignment: .leading
+            )
+        } trailing: {
             switch field.kind {
             case let .choice(options):
-                Picker("", selection: stringBinding(field)) {
+                let selection = stringBinding(field)
+                Menu {
                     ForEach(options) { option in
-                        Text(option.title).tag(option.id)
+                        Button {
+                            selection.wrappedValue = option.id
+                        } label: {
+                            if selection.wrappedValue == option.id {
+                                Label(option.title, systemImage: "checkmark")
+                            } else {
+                                Text(option.title)
+                            }
+                        }
                     }
+                } label: {
+                    HStack(spacing: ClipAllTheme.Spacing.xs) {
+                        Text(
+                            options.first(where: { $0.id == selection.wrappedValue })?.title
+                                ?? selection.wrappedValue
+                        )
+                            .foregroundStyle(ClipAllTheme.textPrimary)
+                            .lineLimit(1)
+                        Spacer(minLength: ClipAllTheme.Spacing.xs)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(ClipAllTheme.textSecondary)
+                    }
+                    .clipAllControlSlot()
                 }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .frame(width: 250)
+                .menuStyle(.borderlessButton)
+                .accessibilityLabel(field.title)
+                .frame(
+                    minWidth: 180,
+                    idealWidth: 260,
+                    maxWidth: ClipAllTheme.Size.formControl
+                )
             case .toggle:
                 Toggle("", isOn: boolBinding(field))
                     .labelsHidden()
                     .toggleStyle(.switch)
-                    .fixedSize()
+                    .accessibilityLabel(field.title)
+                    .frame(
+                        minWidth: 180,
+                        idealWidth: 260,
+                        maxWidth: ClipAllTheme.Size.formControl,
+                        alignment: .trailing
+                    )
             case let .text(placeholder):
                 TextField(placeholder ?? "", text: stringBinding(field))
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 300)
+                    .textFieldStyle(.plain)
+                    .clipAllControlSlot()
+                    .accessibilityLabel(field.title)
+                    .frame(
+                        minWidth: 180,
+                        idealWidth: 260,
+                        maxWidth: ClipAllTheme.Size.formControl
+                    )
             case let .secret(placeholder):
                 SecretConfigurationField(
                     pluginID: descriptor.id,
@@ -71,9 +117,6 @@ struct PluginConfigurationForm: View {
                 )
             }
         }
-        .padding(.horizontal, ClipAllTheme.Spacing.md)
-        .padding(.vertical, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func stringBinding(_ field: PluginConfigurationField) -> Binding<String> {
@@ -133,24 +176,42 @@ private struct SecretConfigurationField: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                SecureField(model.isStored ? "已设置，输入新值可替换" : (placeholder ?? ""), text: $model.value)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 220)
+        VStack(alignment: .leading, spacing: ClipAllTheme.Spacing.xs) {
+            HStack(spacing: ClipAllTheme.Spacing.xs) {
+                SecureField(
+                    model.isStored ? "已设置，输入新值可替换" : (placeholder ?? ""),
+                    text: $model.value
+                )
+                    .textFieldStyle(.plain)
+                    .frame(maxWidth: .infinity)
+                    .accessibilityLabel(field.title)
+
+                if model.isStored {
+                    ClipAllTag("已保存", tone: .success, systemImage: "key.fill")
+                }
+
                 Button("保存") { model.save() }
+                    .buttonStyle(ClipAllButtonStyle(variant: .primary))
                     .disabled(model.value.isEmpty)
                 if model.isStored {
                     Button("清除", role: .destructive) { model.clear() }
+                        .buttonStyle(.borderless)
                 }
             }
+            .clipAllControlSlot(minimumHeight: 40)
+
             if let message = model.message {
                 Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(ClipAllTheme.Typography.supporting)
+                    .foregroundStyle(ClipAllTheme.textSecondary)
             }
         }
-        .frame(width: 360, alignment: .leading)
+        .frame(
+            minWidth: 180,
+            idealWidth: 260,
+            maxWidth: ClipAllTheme.Size.formControl,
+            alignment: .leading
+        )
     }
 }
 

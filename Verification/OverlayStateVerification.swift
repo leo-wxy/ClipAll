@@ -954,8 +954,28 @@ enum OverlayStateVerification {
 
         let initial = SettingsStore(defaults: defaults)
         try expect(initial.pinnedCapabilityIDs == [.search, .translate], "首次启动应固定搜索和翻译")
-        _ = initial.setPinned(.search, isPinned: false)
-        _ = initial.setPinned(.translate, isPinned: false)
+        try expect(initial.setPinned(.timestampToDate, isPinned: true), "未满四个时应允许固定插件能力")
+        try expect(initial.setPinned(.dateToTimestamp, isPinned: true), "第四个插件能力应能固定")
+
+        let overflowCapability: CapabilityID = "verification.extra-capability"
+        try expect(
+            !initial.setPinned(overflowCapability, isPinned: true),
+            "固定能力达到四个后应拒绝继续添加"
+        )
+        try expect(
+            initial.pinnedCapabilityIDs.count == SettingsStore.maximumPinnedCapabilities,
+            "拒绝第五个能力后固定列表不应改变"
+        )
+
+        try expect(initial.setPinned(.search, isPinned: false), "已固定能力应能取消")
+        try expect(
+            initial.setPinned(overflowCapability, isPinned: true),
+            "取消固定后应能从插件重新固定其他能力"
+        )
+
+        for id in initial.pinnedCapabilityIDs {
+            _ = initial.setPinned(id, isPinned: false)
+        }
         try expect(initial.pinnedCapabilityIDs.isEmpty, "用户应能取消全部固定能力")
 
         let reloaded = SettingsStore(defaults: defaults)
@@ -980,6 +1000,7 @@ enum OverlayStateVerification {
         defer { defaults.removePersistentDomain(forName: suite) }
 
         let initial = SettingsStore(defaults: defaults)
+        try expect(initial.appearancePreference == .system, "外观首次启动应跟随系统")
         try expect(initial.isMenuBarIconVisible, "菜单栏图标首次启动应默认显示")
         try expect(initial.isDockIconVisible, "Dock 图标首次启动应默认显示")
 
@@ -992,8 +1013,10 @@ enum OverlayStateVerification {
 
         try expect(initial.setDockIconVisible(true), "应允许恢复 Dock 图标")
         try expect(initial.setMenuBarIconVisible(false), "Dock 显示时应允许隐藏菜单栏")
+        initial.appearancePreference = .dark
 
         let reloaded = SettingsStore(defaults: defaults)
+        try expect(reloaded.appearancePreference == .dark, "外观设置应持久化")
         try expect(!reloaded.isMenuBarIconVisible, "菜单栏图标设置应持久化")
         try expect(reloaded.isDockIconVisible, "Dock 图标设置应持久化")
 

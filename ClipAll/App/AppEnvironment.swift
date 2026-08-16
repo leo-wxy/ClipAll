@@ -125,6 +125,12 @@ final class AppEnvironment: ObservableObject {
                 Task { @MainActor [weak self] in self?.synchronizeSelectionMonitoring() }
             }
             .store(in: &cancellables)
+        settings.$appearancePreference
+            .removeDuplicates()
+            .sink { [weak self] preference in
+                self?.synchronizeAppearance(preference)
+            }
+            .store(in: &cancellables)
         settings.$isDockIconVisible
             .removeDuplicates()
             .sink { [weak self] _ in
@@ -227,6 +233,14 @@ final class AppEnvironment: ObservableObject {
         NSApplication.shared.setActivationPolicy(
             settings.isDockIconVisible ? .regular : .accessory
         )
+    }
+
+    private func synchronizeAppearance(_ preference: AppearancePreference) {
+        NSApplication.shared.appearance = switch preference {
+        case .system: nil
+        case .light: NSAppearance(named: .aqua)
+        case .dark: NSAppearance(named: .darkAqua)
+        }
     }
 
     private static func defaultApplicationSupportURL() -> URL {

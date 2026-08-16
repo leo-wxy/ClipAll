@@ -7,10 +7,18 @@ private enum PluginDetailSection: String, CaseIterable, Identifiable {
     case capabilities = "能力"
 
     var id: String { rawValue }
+
+    var symbolName: String {
+        switch self {
+        case .configuration: "slider.horizontal.3"
+        case .capabilities: "sparkles"
+        }
+    }
 }
 
 @MainActor
 private final class PluginsSettingsViewModel: ObservableObject {
+    @Published var query = ""
     @Published var selectedPluginID: PluginID?
     @Published var preparedImport: PreparedPluginImport?
     @Published var uninstallTarget: ManagedPlugin?
@@ -34,33 +42,58 @@ struct PluginsSettingsView: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: ClipAllTheme.Spacing.md) {
-            pluginListPanel
-            if let descriptor = selectedDescriptor {
-                PluginSettingsDetail(
-                    descriptor: descriptor,
-                    environment: environment,
-                    section: $model.selectedDetailSection,
-                    onError: { model.errorMessage = $0 },
-                    onUninstall: {
-                        model.uninstallTarget = lifecycle.plugin(id: descriptor.id)
+        VStack(spacing: 0) {
+            ClipAllPageHeader(
+                title: "插件",
+                subtitle: "能力属于插件；在这里查看、配置并固定到取词操作栏。"
+            )
+            .padding(.horizontal, ClipAllTheme.Spacing.xl)
+            .padding(.top, ClipAllTheme.Spacing.xl)
+            .padding(.bottom, ClipAllTheme.Spacing.lg)
+
+            Rectangle()
+                .fill(ClipAllTheme.separator)
+                .frame(height: 1)
+
+            HStack(alignment: .top, spacing: 0) {
+                pluginListPanel
+                Rectangle()
+                    .fill(ClipAllTheme.separator)
+                    .frame(width: 1)
+                if let descriptor = selectedDescriptor {
+                    PluginSettingsDetail(
+                        descriptor: descriptor,
+                        environment: environment,
+                        section: $model.selectedDetailSection,
+                        onError: { model.errorMessage = $0 },
+                        onUninstall: {
+                            model.uninstallTarget = lifecycle.plugin(id: descriptor.id)
+                        }
+                    )
+                    .id(descriptor.id)
+                    .background(ClipAllTheme.contentSurface)
+                } else {
+                    VStack {
+                        Spacer()
+                        ClipAllEmptyState(
+                            title: model.query.isEmpty ? "选择一个插件" : "没有匹配的插件",
+                            systemImage: model.query.isEmpty
+                                ? "puzzlepiece.extension"
+                                : "magnifyingglass",
+                            message: model.query.isEmpty
+                                ? "查看能力、配置和安装状态。"
+                                : "尝试搜索插件名称、摘要或能力。",
+                            minimumHeight: 116
+                        )
+                        .frame(maxWidth: 520)
+                        Spacer()
                     }
-                )
-                .id(descriptor.id)
-                .clipAllSurface()
-            } else {
-                ContentUnavailableView(
-                    "选择一个插件",
-                    systemImage: "puzzlepiece.extension",
-                    description: Text("查看能力、配置和安装状态。")
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipAllSurface()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(ClipAllTheme.contentSurface)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(.horizontal, ClipAllTheme.Spacing.xl)
-        .padding(.top, ClipAllTheme.Spacing.lg)
-        .padding(.bottom, ClipAllTheme.Spacing.xl)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task {
             await environment.start()
@@ -154,28 +187,52 @@ struct PluginsSettingsView: View {
             .padding(ClipAllTheme.Spacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
 
+            HStack(spacing: ClipAllTheme.Spacing.xs) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(ClipAllTheme.textSecondary)
+                TextField("搜索插件或能力", text: $model.query)
+                    .textFieldStyle(.plain)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .clipAllInset(cornerRadius: ClipAllTheme.Radius.control)
+            .padding(.horizontal, ClipAllTheme.Spacing.sm)
+            .padding(.bottom, ClipAllTheme.Spacing.sm)
+
             Divider()
 
             ScrollView {
-                LazyVStack(spacing: 7) {
-                    ForEach(pluginDescriptors) { descriptor in
-                        Button {
-                            model.selectedPluginID = descriptor.id
-                        } label: {
-                            PluginListRow(
-                                descriptor: descriptor,
-                                managed: lifecycle.plugin(id: descriptor.id),
-                                isSelected: model.selectedPluginID == descriptor.id
-                            )
+                Group {
+                    if pluginDescriptors.isEmpty {
+                        ClipAllEmptyState(
+                            title: "没有匹配的插件",
+                            systemImage: "magnifyingglass",
+                            message: "能力仍会在所属插件中展示。",
+                            minimumHeight: 132
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 180)
+                    } else {
+                        LazyVStack(spacing: ClipAllTheme.Spacing.xxs) {
+                            ForEach(pluginDescriptors) { descriptor in
+                                Button {
+                                    model.selectedPluginID = descriptor.id
+                                } label: {
+                                    PluginListRow(
+                                        descriptor: descriptor,
+                                        managed: lifecycle.plugin(id: descriptor.id),
+                                        isSelected: model.selectedPluginID == descriptor.id
+                                    )
+                                }
+                                .buttonStyle(
+                                    ClipAllSelectableRowStyle(
+                                        isSelected: model.selectedPluginID == descriptor.id
+                                    )
+                                )
+                                .accessibilityAddTraits(
+                                    model.selectedPluginID == descriptor.id ? .isSelected : []
+                                )
+                            }
                         }
-                        .buttonStyle(
-                            ClipAllSelectableRowStyle(
-                                isSelected: model.selectedPluginID == descriptor.id
-                            )
-                        )
-                        .accessibilityAddTraits(
-                            model.selectedPluginID == descriptor.id ? .isSelected : []
-                        )
                     }
                 }
                 .padding(ClipAllTheme.Spacing.sm)
@@ -189,7 +246,7 @@ struct PluginsSettingsView: View {
                         systemImage: "exclamationmark.triangle.fill"
                     )
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(ClipAllTheme.warning)
                     if let invalid = lifecycle.invalidPlugins.first {
                         Text(invalid.issue.errorDescription ?? invalid.issue.message)
                             .font(.caption2)
@@ -201,7 +258,7 @@ struct PluginsSettingsView: View {
                 .padding(.horizontal, ClipAllTheme.Spacing.md)
                 .padding(.vertical, ClipAllTheme.Spacing.sm)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.orange.opacity(0.055))
+                .background(ClipAllTheme.warning.opacity(0.055))
             }
 
             Divider()
@@ -214,8 +271,7 @@ struct PluginsSettingsView: View {
                         Label("安装时间工具示例", systemImage: "clock.arrow.2.circlepath")
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(ClipAllTheme.accent)
+                    .buttonStyle(ClipAllButtonStyle(variant: .secondary))
                     .disabled(model.isInstalling || environment.bundledTimestampToolsURL == nil)
                     .help(
                         environment.bundledTimestampToolsURL == nil
@@ -230,23 +286,45 @@ struct PluginsSettingsView: View {
                     Label("导入插件", systemImage: "plus")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+                .buttonStyle(ClipAllButtonStyle(variant: .primary))
                 .disabled(model.isInstalling)
             }
             .padding(ClipAllTheme.Spacing.sm)
         }
         .frame(width: ClipAllTheme.Size.pluginList)
         .frame(maxHeight: .infinity)
-        .clipAllSurface()
+        .background(ClipAllTheme.elevatedSurface)
     }
 
-    private var pluginDescriptors: [PluginDescriptor] {
+    private var allPluginDescriptors: [PluginDescriptor] {
         var byID = Dictionary(uniqueKeysWithValues: registry.plugins.map { ($0.id, $0) })
         for plugin in lifecycle.plugins {
             byID[plugin.id] = plugin.package.definition.descriptor
         }
         return byID.values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    private var pluginDescriptors: [PluginDescriptor] {
+        let query = model.query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return allPluginDescriptors }
+        return allPluginDescriptors.filter { descriptor in
+            descriptor.name.localizedCaseInsensitiveContains(query)
+                || descriptor.summary.localizedCaseInsensitiveContains(query)
+                || capabilityDescriptors(
+                    for: descriptor,
+                    registry: registry,
+                    lifecycle: lifecycle
+                ).contains { capability in
+                    capability.name.localizedCaseInsensitiveContains(query)
+                        || capability.purpose.localizedCaseInsensitiveContains(query)
+                        || capability.supportedContentKinds.contains {
+                            contentKindName($0).localizedCaseInsensitiveContains(query)
+                        }
+                        || capability.examples.contains {
+                            $0.localizedCaseInsensitiveContains(query)
+                        }
+                }
+        }
     }
 
     private var selectedDescriptor: PluginDescriptor? {
@@ -296,31 +374,32 @@ private struct PluginListRow: View {
     let isSelected: Bool
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .center, spacing: ClipAllTheme.Spacing.sm) {
             ClipAllIconBadge(
                 symbolName: descriptor.symbolName,
                 size: ClipAllTheme.Size.iconSmall,
                 tone: isSelected ? .accent : .neutral
             )
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: ClipAllTheme.Spacing.xxs) {
                 Text(descriptor.name)
-                    .fontWeight(.medium)
+                    .font(.callout.weight(.semibold))
                     .foregroundStyle(isSelected ? ClipAllTheme.accent : .primary)
-                Text(status)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text("v\(descriptor.version) · \(sourceLabel)")
+                    .font(ClipAllTheme.Typography.supporting)
+                    .foregroundStyle(ClipAllTheme.textSecondary)
             }
             Spacer()
-            Text(stateLabel)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(stateColor)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(stateColor.opacity(0.09), in: Capsule())
+            ClipAllTag(
+                stateLabel,
+                tone: stateTone,
+                systemImage: stateSymbolName
+            )
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 9)
+        .padding(.horizontal, ClipAllTheme.Spacing.sm)
+        .padding(.vertical, ClipAllTheme.Spacing.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(descriptor.name)，\(sourceLabel)，\(status)，版本 \(descriptor.version)")
     }
 
     private var status: String {
@@ -334,7 +413,7 @@ private struct PluginListRow: View {
         }
     }
 
-    private var stateLabel: String {
+    private var sourceLabel: String {
         switch descriptor.source {
         case .builtIn: "内置"
         case .development: "开发"
@@ -342,9 +421,17 @@ private struct PluginListRow: View {
         }
     }
 
-    private var stateColor: Color {
-        if managed?.state == .disabled { return .secondary }
-        return isSelected ? ClipAllTheme.accent : .secondary
+    private var stateLabel: String {
+        guard descriptor.source == .installed else { return "可用" }
+        return managed?.state == .disabled ? "已停用" : "已启用"
+    }
+
+    private var stateTone: ClipAllTag.Tone {
+        managed?.state == .disabled ? .warning : .success
+    }
+
+    private var stateSymbolName: String {
+        managed?.state == .disabled ? "pause.fill" : "checkmark"
     }
 }
 
@@ -353,6 +440,7 @@ private struct PluginSettingsDetail: View {
     let environment: AppEnvironment
     @ObservedObject private var lifecycle: PluginLifecycleController
     @ObservedObject private var registry: CapabilityRegistry
+    @ObservedObject private var settings: SettingsStore
     @Binding private var section: PluginDetailSection
     let onError: (String) -> Void
     let onUninstall: () -> Void
@@ -368,6 +456,7 @@ private struct PluginSettingsDetail: View {
         self.environment = environment
         _lifecycle = ObservedObject(wrappedValue: environment.pluginLifecycle)
         _registry = ObservedObject(wrappedValue: environment.registry)
+        _settings = ObservedObject(wrappedValue: environment.settings)
         _section = section
         self.onError = onError
         self.onUninstall = onUninstall
@@ -378,19 +467,7 @@ private struct PluginSettingsDetail: View {
             header
             Divider()
 
-            HStack {
-                Picker("插件详情", selection: $section) {
-                    ForEach(PluginDetailSection.allCases) { item in
-                        Text(item.rawValue).tag(item)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: 180)
-                Spacer()
-            }
-            .padding(.horizontal, ClipAllTheme.Spacing.lg)
-            .padding(.vertical, ClipAllTheme.Spacing.sm)
+            detailTabs
 
             Divider()
 
@@ -405,32 +482,30 @@ private struct PluginSettingsDetail: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 14) {
+        HStack(alignment: .top, spacing: ClipAllTheme.Spacing.md) {
             ClipAllIconBadge(
                 symbolName: descriptor.symbolName,
                 size: ClipAllTheme.Size.iconLarge
             )
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: ClipAllTheme.Spacing.xs) {
-                    Text(sourceLabel)
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(ClipAllTheme.quietFill, in: Capsule())
-                    Text("v\(descriptor.version)")
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: ClipAllTheme.Spacing.xs) {
+                HStack(spacing: ClipAllTheme.Spacing.xxs) {
+                    ClipAllTag(sourceLabel, tone: .accent, systemImage: sourceSymbolName)
+                    ClipAllTag("v\(descriptor.version)", tone: .muted)
+                    if descriptor.source == .installed, let managed {
+                        ClipAllTag(
+                            managed.state == .disabled ? "已停用" : "已启用",
+                            tone: managed.state == .disabled ? .warning : .success,
+                            systemImage: managed.state == .disabled ? "pause.fill" : "checkmark"
+                        )
+                    }
                 }
                 Text(descriptor.name)
-                    .font(.title3.weight(.semibold))
+                    .font(ClipAllTheme.Typography.pageTitle)
+                    .foregroundStyle(ClipAllTheme.textPrimary)
                 Text(descriptor.summary)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ClipAllTheme.textSecondary)
                     .lineLimit(2)
-                Text(descriptor.id.rawValue)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
             }
             Spacer(minLength: ClipAllTheme.Spacing.md)
 
@@ -458,45 +533,87 @@ private struct PluginSettingsDetail: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var detailTabs: some View {
+        HStack(spacing: ClipAllTheme.Spacing.xxs) {
+            ForEach(PluginDetailSection.allCases) { item in
+                Button {
+                    section = item
+                } label: {
+                    Label(item.rawValue, systemImage: item.symbolName)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(
+                            section == item
+                                ? ClipAllTheme.accent
+                                : ClipAllTheme.textSecondary
+                        )
+                        .padding(.horizontal, ClipAllTheme.Spacing.sm)
+                        .padding(.vertical, ClipAllTheme.Spacing.xs)
+                        .background(
+                            section == item ? ClipAllTheme.selectionFill : .clear,
+                            in: RoundedRectangle(
+                                cornerRadius: ClipAllTheme.Radius.control,
+                                style: .continuous
+                            )
+                        )
+                        .overlay(alignment: .bottom) {
+                            if section == item {
+                                Capsule()
+                                    .fill(ClipAllTheme.accent)
+                                    .frame(height: 2)
+                                    .padding(.horizontal, ClipAllTheme.Spacing.xs)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(section == item ? .isSelected : [])
+                .accessibilityLabel("插件详情：\(item.rawValue)")
+            }
+            Spacer()
+        }
+        .padding(.horizontal, ClipAllTheme.Spacing.lg)
+        .padding(.vertical, ClipAllTheme.Spacing.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private var configurationPane: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: ClipAllTheme.Spacing.lg) {
                 if descriptor.configurationFields.isEmpty {
-                    ContentUnavailableView(
-                        "无需配置",
+                    ClipAllEmptyState(
+                        title: "无需配置",
                         systemImage: "checkmark.circle",
-                        description: Text("这个插件安装后即可使用。")
+                        message: "这个插件安装后即可使用。",
+                        minimumHeight: 104
                     )
-                    .frame(maxWidth: .infinity, minHeight: 220)
+                    .frame(maxWidth: .infinity)
                 } else {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text("配置")
-                            .font(.headline)
-                        Text("修改后立即用于下一次能力执行。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    ClipAllSettingsSection(
+                        "运行配置",
+                        subtitle: "修改后立即用于下一次能力执行。"
+                    ) {
+                        PluginConfigurationForm(
+                            descriptor: descriptor,
+                            configurationStore: environment.configuration,
+                            secretStore: environment.secrets
+                        )
                     }
-
-                    PluginConfigurationForm(
-                        descriptor: descriptor,
-                        configurationStore: environment.configuration,
-                        secretStore: environment.secrets
-                    )
-                    .clipAllInset(cornerRadius: ClipAllTheme.Radius.surface)
                 }
 
                 if descriptor.source == .installed {
-                    HStack {
-                        Button("卸载插件…", role: .destructive, action: onUninstall)
-                        Spacer()
-                        Text("安装副本、配置和密钥会一并删除")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    ClipAllSettingsSection(
+                        "插件管理",
+                        subtitle: "安装副本、配置和密钥会一并删除。"
+                    ) {
+                        HStack {
+                            Button("卸载插件…", role: .destructive, action: onUninstall)
+                                .buttonStyle(.bordered)
+                            Spacer()
+                        }
                     }
-                    .padding(.top, ClipAllTheme.Spacing.xs)
                 }
             }
-            .padding(ClipAllTheme.Spacing.lg)
+            .padding(.horizontal, ClipAllTheme.Spacing.lg)
+            .padding(.bottom, ClipAllTheme.Spacing.lg)
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
@@ -506,57 +623,46 @@ private struct PluginSettingsDetail: View {
     private var capabilitiesPane: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("提供的能力")
-                            .font(.headline)
-                        Text("每个能力会独立参与固定、匹配和执行。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Text("\(capabilities.count) 个")
-                        .font(.caption.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(ClipAllTheme.Spacing.md)
-
-                Divider()
-
-                ForEach(Array(capabilities.enumerated()), id: \.element.id) { index, capability in
-                    HStack(alignment: .top, spacing: 12) {
-                        ClipAllIconBadge(
-                            symbolName: capability.symbolName,
-                            size: ClipAllTheme.Size.iconSmall,
-                            tone: .neutral
+                ClipAllSettingsSection(
+                    "提供的能力",
+                    subtitle: "每个能力会独立参与匹配和执行；固定后会出现在取词操作栏。"
+                ) {
+                    HStack {
+                        ClipAllTag(
+                            "\(capabilities.count) 个能力",
+                            tone: .muted,
+                            systemImage: "sparkles"
                         )
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(capability.name)
-                                .fontWeight(.medium)
-                            Text(capability.purpose)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
                         Spacer()
                     }
-                    .padding(.horizontal, ClipAllTheme.Spacing.md)
-                    .padding(.vertical, ClipAllTheme.Spacing.sm)
-                    if index < capabilities.count - 1 { Divider() }
+
+                    if capabilities.isEmpty {
+                        ClipAllEmptyState(
+                            title: "暂无可用能力",
+                            systemImage: "sparkles",
+                            message: "这个插件目前没有声明可执行能力。",
+                            minimumHeight: 104
+                        )
+                    } else {
+                        VStack(spacing: 0) {
+                            ForEach(Array(capabilities.enumerated()), id: \.element.id) { index, capability in
+                                capabilityRow(capability)
+                                if index < capabilities.count - 1 { Divider() }
+                            }
+                        }
+                    }
                 }
             }
             .frame(maxWidth: 760, alignment: .leading)
-            .clipAllInset(cornerRadius: ClipAllTheme.Radius.surface)
-            .padding(ClipAllTheme.Spacing.lg)
+            .padding(.horizontal, ClipAllTheme.Spacing.lg)
+            .padding(.bottom, ClipAllTheme.Spacing.lg)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var capabilities: [CapabilityDescriptor] {
-        if let managed {
-            return managed.package.definition.capabilities.map(\.descriptor)
-        }
-        return registry.descriptors.filter { $0.pluginID == descriptor.id }
+        capabilityDescriptors(for: descriptor, registry: registry, lifecycle: lifecycle)
     }
 
     private var managed: ManagedPlugin? {
@@ -571,6 +677,14 @@ private struct PluginSettingsDetail: View {
         }
     }
 
+    private var sourceSymbolName: String {
+        switch descriptor.source {
+        case .builtIn: "shippingbox.fill"
+        case .installed: "arrow.down.app.fill"
+        case .development: "hammer.fill"
+        }
+    }
+
     private func setEnabled(_ value: Bool) {
         Task {
             do {
@@ -579,6 +693,118 @@ private struct PluginSettingsDetail: View {
                 onError(error.localizedDescription)
             }
         }
+    }
+
+    private func capabilityRow(_ capability: CapabilityDescriptor) -> some View {
+        HStack(alignment: .top, spacing: ClipAllTheme.Spacing.sm) {
+            ClipAllIconBadge(
+                symbolName: capability.symbolName,
+                size: ClipAllTheme.Size.iconSmall,
+                tone: isPinned(capability.id) ? .accent : .neutral
+            )
+
+            VStack(alignment: .leading, spacing: ClipAllTheme.Spacing.xs) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(capability.name)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(ClipAllTheme.textPrimary)
+                    Text(capability.purpose)
+                        .font(.caption)
+                        .foregroundStyle(ClipAllTheme.textSecondary)
+                }
+
+                if !capability.supportedContentKinds.isEmpty {
+                    HStack(spacing: ClipAllTheme.Spacing.xxs) {
+                        ForEach(
+                            capability.supportedContentKinds.sorted {
+                                contentKindName($0) < contentKindName($1)
+                            },
+                            id: \.self
+                        ) { kind in
+                            ClipAllTag(
+                                contentKindName(kind),
+                                tone: .muted,
+                                systemImage: "text.badge.checkmark"
+                            )
+                        }
+                    }
+                }
+
+                ForEach(capability.examples, id: \.self) { example in
+                    ClipAllExampleBlock(text: example)
+                }
+            }
+
+            Spacer(minLength: ClipAllTheme.Spacing.md)
+
+            Button {
+                _ = settings.setPinned(capability.id, isPinned: !isPinned(capability.id))
+            } label: {
+                Label(
+                    isPinned(capability.id) ? "已固定" : "固定到操作栏",
+                    systemImage: isPinned(capability.id) ? "pin.fill" : "pin"
+                )
+            }
+            .buttonStyle(
+                ClipAllButtonStyle(
+                    variant: isPinned(capability.id) ? .secondary : .primary
+                )
+            )
+            .disabled(isPinDisabled(capability.id))
+            .help(pinHelp(capability.id))
+            .accessibilityLabel(
+                isPinned(capability.id)
+                    ? "取消固定“\(capability.name)”"
+                    : "固定“\(capability.name)”到操作栏"
+            )
+        }
+        .padding(.horizontal, ClipAllTheme.Spacing.md)
+        .padding(.vertical, ClipAllTheme.Spacing.sm)
+    }
+
+    private func isPinned(_ capabilityID: CapabilityID) -> Bool {
+        settings.pinnedCapabilityIDs.contains(capabilityID)
+    }
+
+    private func isPinDisabled(_ capabilityID: CapabilityID) -> Bool {
+        guard !isPinned(capabilityID) else { return false }
+        if managed?.state == .disabled { return true }
+        return settings.pinnedCapabilityIDs.count >= SettingsStore.maximumPinnedCapabilities
+    }
+
+    private func pinHelp(_ capabilityID: CapabilityID) -> String {
+        if isPinned(capabilityID) { return "从操作栏取消固定" }
+        if managed?.state == .disabled { return "启用插件后才能固定能力" }
+        if settings.pinnedCapabilityIDs.count >= SettingsStore.maximumPinnedCapabilities {
+            return "操作栏最多固定 \(SettingsStore.maximumPinnedCapabilities) 个能力"
+        }
+        return "固定到取词操作栏"
+    }
+}
+
+@MainActor
+private func capabilityDescriptors(
+    for descriptor: PluginDescriptor,
+    registry: CapabilityRegistry,
+    lifecycle: PluginLifecycleController
+) -> [CapabilityDescriptor] {
+    if let managed = lifecycle.plugin(id: descriptor.id) {
+        return managed.package.definition.capabilities.map(\.descriptor)
+    }
+    return registry.descriptors.filter { $0.pluginID == descriptor.id }
+}
+
+private func contentKindName(_ kind: ContentKind) -> String {
+    switch kind {
+    case .text: "文本"
+    case .foreignLanguage: "外语文本"
+    case .url: "网址"
+    case .email: "邮箱"
+    case .code: "代码"
+    case .address: "地址"
+    case .unixTimestampSeconds: "秒级时间戳"
+    case .unixTimestampMilliseconds: "毫秒级时间戳"
+    case .dateTime: "日期时间"
     }
 }
 
@@ -627,7 +853,7 @@ private struct PluginInstallationConfirmationView: View {
                 systemImage: "exclamationmark.shield"
             )
             .font(.callout)
-            .foregroundStyle(.orange)
+            .foregroundStyle(ClipAllTheme.warning)
 
             HStack {
                 Spacer()

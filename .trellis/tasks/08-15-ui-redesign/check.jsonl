@@ -1,0 +1,5 @@
+{"file":".trellis/spec/frontend/index.md","reason":"复核前端任务的项目级质量清单"}
+{"file":".trellis/spec/frontend/ui-design-system.md","reason":"逐项核对批准视觉、语义 token、状态和无翻译箭头要求"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"复核浮窗几何、焦点、输入、锚点和外部执行回归"}
+{"file":".trellis/spec/backend/local-build-and-release.md","reason":"复核完整构建、脚本、Applications 安装和真实 App 验收"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"检查重复常量、局部视觉配方和不必要抽象"}

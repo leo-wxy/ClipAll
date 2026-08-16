@@ -6,70 +6,77 @@ struct SelectionSettingsView: View {
     @ObservedObject var settings: SettingsStore
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: ClipAllTheme.Spacing.sm) {
-                automaticDisplayCard
-                applicationRulesCard
-                fixedFiltersCard
-                compatibilityCard
-            }
-            .frame(maxWidth: 760)
-            .padding(ClipAllTheme.Spacing.lg)
-            .frame(maxWidth: .infinity)
+        ClipAllSettingsPage(
+            "取词",
+            subtitle: "控制浮窗何时出现，并为不同 App 保留合适的取词方式。"
+        ) {
+            automaticDisplaySection
+            applicationRulesSection
+            fixedFiltersSection
+            compatibilitySection
         }
     }
 
-    private var automaticDisplayCard: some View {
-        ClipAllSectionCard(
+    private var automaticDisplaySection: some View {
+        ClipAllSettingsSection(
             "自动显示",
             subtitle: "控制哪些文字选择操作会自动显示浮窗。"
         ) {
-            VStack(spacing: ClipAllTheme.Spacing.sm) {
-                settingRow("自动监听文字选择", symbol: "selection.pin.in.out") {
-                    Toggle("", isOn: $settings.isMonitoringEnabled)
-                }
-                Divider()
-                settingRow("拖选或 Shift 扩选后显示", symbol: "text.cursor") {
-                    Toggle("", isOn: $settings.isDragSelectionEnabled)
-                }
-                Divider()
-                settingRow("双击或多击文字后显示", symbol: "cursorarrow.click.2") {
-                    Toggle("", isOn: $settings.isMultiClickSelectionEnabled)
-                }
+            VStack(spacing: ClipAllTheme.Spacing.xs) {
+                settingToggleRow(
+                    "自动监听文字选择",
+                    subtitle: "监听前台 App 中形成的有效文字选区。",
+                    symbol: "selection.pin.in.out",
+                    isOn: $settings.isMonitoringEnabled
+                )
+                settingToggleRow(
+                    "拖选或 Shift 扩选后显示",
+                    subtitle: "鼠标拖选，或按住 Shift 扩展选区后显示。",
+                    symbol: "text.cursor",
+                    isOn: $settings.isDragSelectionEnabled
+                )
+                settingToggleRow(
+                    "双击或多击文字后显示",
+                    subtitle: "双击单词或多击段落后显示。",
+                    symbol: "cursorarrow.click.2",
+                    isOn: $settings.isMultiClickSelectionEnabled
+                )
             }
         }
     }
 
-    private var applicationRulesCard: some View {
-        ClipAllSectionCard(
+    private var applicationRulesSection: some View {
+        ClipAllSettingsSection(
             "应用规则",
             subtitle: "为常用 App 覆盖自动显示规则；快捷键和菜单主动取词不受影响。"
         ) {
             VStack(alignment: .leading, spacing: ClipAllTheme.Spacing.sm) {
                 if settings.selectionApplicationBundleIdentifiers.isEmpty {
-                    ContentUnavailableView(
-                        "没有应用规则",
+                    ClipAllEmptyState(
+                        title: "没有应用规则",
                         systemImage: "app.badge",
-                        description: Text("新增 App 后默认跟随全局设置。")
+                        message: "新增 App 后，可单独决定自动显示与兼容取词策略。",
+                        minimumHeight: 88
                     )
-                    .frame(maxWidth: .infinity, minHeight: 100)
                 } else {
-                    ForEach(settings.selectionApplicationBundleIdentifiers, id: \.self) {
-                        bundleIdentifier in
-                        applicationRow(bundleIdentifier)
-                        if bundleIdentifier != settings.selectionApplicationBundleIdentifiers.last {
-                            Divider()
+                    VStack(spacing: ClipAllTheme.Spacing.xs) {
+                        ForEach(settings.selectionApplicationBundleIdentifiers, id: \.self) {
+                            bundleIdentifier in
+                            applicationRow(bundleIdentifier)
                         }
                     }
                 }
 
-                Button("添加应用…", action: chooseApplication)
+                Button(action: chooseApplication) {
+                    Label("添加应用", systemImage: "plus")
+                }
+                .buttonStyle(ClipAllButtonStyle(variant: .secondary))
             }
         }
     }
 
-    private var fixedFiltersCard: some View {
-        ClipAllSectionCard(
+    private var fixedFiltersSection: some View {
+        ClipAllSettingsSection(
             "始终不显示",
             subtitle: "以下安全过滤固定生效，避免旧选区或非文字对象误触。"
         ) {
@@ -83,27 +90,32 @@ struct SelectionSettingsView: View {
         }
     }
 
-    private var compatibilityCard: some View {
-        ClipAllSectionCard(
+    private var compatibilitySection: some View {
+        ClipAllSettingsSection(
             "高级：兼容取词",
             subtitle: "辅助功能无法读取时，临时模拟复制并在内存中恢复原剪贴板。"
         ) {
-            settingRow("启用复制回退", symbol: "doc.on.clipboard") {
-                Toggle("", isOn: $settings.isSelectionFallbackEnabled)
-            }
+            settingToggleRow(
+                "启用复制回退",
+                subtitle: "仅在辅助功能读取失败时使用，不会永久改写剪贴板。",
+                symbol: "doc.on.clipboard",
+                isOn: $settings.isSelectionFallbackEnabled
+            )
         }
     }
 
-    private func settingRow<Control: View>(
+    private func settingToggleRow(
         _ title: String,
+        subtitle: String,
         symbol: String,
-        @ViewBuilder control: () -> Control
+        isOn: Binding<Bool>
     ) -> some View {
-        HStack(alignment: .center, spacing: ClipAllTheme.Spacing.md) {
-            Label(title, systemImage: symbol)
-                .fontWeight(.medium)
-            Spacer()
-            control()
+        ClipAllSettingsRow(
+            title,
+            subtitle: subtitle,
+            symbolName: symbol
+        ) {
+            Toggle("", isOn: isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .fixedSize()
@@ -119,58 +131,99 @@ struct SelectionSettingsView: View {
             FileManager.default.displayName(atPath: $0.path)
         } ?? bundleIdentifier
 
-        return HStack(spacing: ClipAllTheme.Spacing.sm) {
-            Group {
-                if let applicationURL {
-                    Image(nsImage: NSWorkspace.shared.icon(forFile: applicationURL.path))
-                        .resizable()
-                        .scaledToFit()
-                } else {
-                    Image(systemName: "app")
-                        .font(.system(size: 20))
+        return ClipAllSettingsRow(minimumHeight: 72) {
+            HStack(spacing: ClipAllTheme.Spacing.sm) {
+                Group {
+                    if let applicationURL {
+                        Image(nsImage: NSWorkspace.shared.icon(forFile: applicationURL.path))
+                            .resizable()
+                            .scaledToFit()
+                    } else {
+                        ClipAllIconBadge(
+                            symbolName: "app.fill",
+                            size: ClipAllTheme.Size.iconSmall,
+                            tone: .neutral
+                        )
+                    }
+                }
+                .frame(width: 32, height: 32)
+
+                VStack(alignment: .leading, spacing: ClipAllTheme.Spacing.xxs) {
+                    HStack(spacing: ClipAllTheme.Spacing.xs) {
+                        Text(applicationName)
+                            .font(ClipAllTheme.Typography.body.weight(.medium))
+                            .foregroundStyle(ClipAllTheme.textPrimary)
+                            .lineLimit(1)
+                        ClipAllTag("应用规则", tone: .muted)
+                    }
+                    Text(bundleIdentifier)
+                        .font(ClipAllTheme.Typography.supporting)
+                        .foregroundStyle(ClipAllTheme.textSecondary)
+                        .lineLimit(1)
                 }
             }
-            .frame(width: 30, height: 30)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(applicationName)
-                    .fontWeight(.medium)
-                Text(bundleIdentifier)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: ClipAllTheme.Spacing.sm)
-
-            Picker(
-                "自动显示",
-                selection: automaticDisplayPolicyBinding(for: bundleIdentifier)
-            ) {
-                ForEach(SelectionAutomaticDisplayPolicy.allCases, id: \.self) { policy in
-                    Text(policyTitle(policy)).tag(policy)
+        } trailing: {
+            HStack(alignment: .center, spacing: ClipAllTheme.Spacing.sm) {
+                VStack(alignment: .trailing, spacing: ClipAllTheme.Spacing.xxs) {
+                    Text("自动显示")
+                        .font(.caption)
+                        .foregroundStyle(ClipAllTheme.textSecondary)
+                    Picker(
+                        "自动显示",
+                        selection: automaticDisplayPolicyBinding(for: bundleIdentifier)
+                    ) {
+                        ForEach(SelectionAutomaticDisplayPolicy.allCases, id: \.self) { policy in
+                            Text(policyTitle(policy)).tag(policy)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(width: 142)
+                    .clipAllControlSlot(width: 142)
+                    .accessibilityLabel("\(applicationName)自动显示策略")
                 }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .frame(width: 126)
 
-            Toggle(
-                "兼容取词",
-                isOn: selectionFallbackBinding(for: bundleIdentifier)
-            )
-            .toggleStyle(.switch)
-            .fixedSize()
+                VStack(alignment: .center, spacing: ClipAllTheme.Spacing.xxs) {
+                    Text("兼容取词")
+                        .font(.caption)
+                        .foregroundStyle(ClipAllTheme.textSecondary)
+                    Toggle(
+                        "兼容取词",
+                        isOn: selectionFallbackBinding(for: bundleIdentifier)
+                    )
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .fixedSize()
+                    .clipAllControlSlot(width: 42)
+                    .accessibilityLabel("\(applicationName)兼容取词")
+                }
 
-            Button("移除", role: .destructive) {
-                settings.removeSelectionApplication(bundleIdentifier)
+                Button(role: .destructive) {
+                    settings.removeSelectionApplication(bundleIdentifier)
+                } label: {
+                    Image(systemName: "xmark.circle")
+                }
+                .buttonStyle(.borderless)
+                .help("移除 \(applicationName) 的规则")
+                .accessibilityLabel("移除 \(applicationName) 的规则")
             }
         }
     }
 
     private func fixedFilter(_ title: String) -> some View {
-        Label(title, systemImage: "checkmark.shield")
-            .foregroundStyle(.secondary)
+        ClipAllSettingsRow(minimumHeight: 46) {
+            HStack(spacing: ClipAllTheme.Spacing.sm) {
+                Image(systemName: "checkmark.shield.fill")
+                    .foregroundStyle(ClipAllTheme.success)
+                    .frame(width: 20)
+                Text(title)
+                    .font(ClipAllTheme.Typography.body)
+                    .foregroundStyle(ClipAllTheme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } trailing: {
+            ClipAllTag("固定", tone: .muted, systemImage: "checkmark")
+        }
     }
 
     private func automaticDisplayPolicyBinding(

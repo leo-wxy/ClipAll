@@ -11,6 +11,12 @@ struct GlobalShortcutConfiguration: Codable, Equatable, Sendable {
     )
 }
 
+enum AppearancePreference: String, CaseIterable, Sendable {
+    case system
+    case light
+    case dark
+}
+
 @MainActor
 final class SettingsStore: ObservableObject {
     static let maximumPinnedCapabilities = 4
@@ -18,6 +24,7 @@ final class SettingsStore: ObservableObject {
 
     private enum Key {
         static let monitoringEnabled = "selectionMonitoringEnabled"
+        static let appearancePreference = "appearancePreference"
         static let menuBarIconVisible = "menuBarIconVisible"
         static let dockIconVisible = "dockIconVisible"
         static let selectionFallbackEnabled = "selectionFallbackEnabled"
@@ -39,6 +46,10 @@ final class SettingsStore: ObservableObject {
 
     @Published var isMonitoringEnabled: Bool {
         didSet { defaults.set(isMonitoringEnabled, forKey: Key.monitoringEnabled) }
+    }
+
+    @Published var appearancePreference: AppearancePreference {
+        didSet { defaults.set(appearancePreference.rawValue, forKey: Key.appearancePreference) }
     }
 
     @Published private(set) var isMenuBarIconVisible: Bool {
@@ -112,6 +123,9 @@ final class SettingsStore: ObservableObject {
         } else {
             isMonitoringEnabled = defaults.bool(forKey: Key.monitoringEnabled)
         }
+        appearancePreference = AppearancePreference(
+            rawValue: defaults.string(forKey: Key.appearancePreference) ?? ""
+        ) ?? .system
 
         let storedMenuBarVisibility = defaults.object(forKey: Key.menuBarIconVisible) == nil
             || defaults.bool(forKey: Key.menuBarIconVisible)

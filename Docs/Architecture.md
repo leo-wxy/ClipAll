@@ -20,7 +20,7 @@ ClipAll/
 │   ├── Runtime/            # runner 客户端与 JSON 协议
 │   └── Development/        # 开发引用、重载、调试 session
 ├── Infrastructure/         # AX、持久化、Keychain、系统与翻译服务
-├── Features/               # 浮层、能力中心、插件配置/管理、调试器
+├── Features/               # 浮层、插件配置/能力管理、设置与调试器
 └── SharedUI/               # 无业务归属的原生 UI 小组件
 
 ClipAllPluginProtocol/      # 主程序与 Runner 共用的 JSON DTO/限制

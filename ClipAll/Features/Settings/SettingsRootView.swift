@@ -44,7 +44,9 @@ struct SettingsRootView: View {
     var body: some View {
         HStack(spacing: 0) {
             sidebar
-            Divider()
+            Rectangle()
+                .fill(ClipAllTheme.separator)
+                .frame(width: 1)
             VStack(spacing: 0) {
                 content
             }
@@ -62,24 +64,23 @@ struct SettingsRootView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
+            HStack(spacing: ClipAllTheme.Spacing.sm) {
                 Image(nsImage: NSApplication.shared.applicationIconImage)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 38, height: 38)
-                VStack(alignment: .leading, spacing: 1) {
+                    .frame(width: 42, height: 42)
+                VStack(alignment: .leading, spacing: 2) {
                     Text("ClipAll")
-                        .font(.headline)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(ClipAllTheme.textPrimary)
                     Text("本地文字能力工具")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                        .foregroundStyle(ClipAllTheme.textSecondary)
                 }
             }
-            .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .clipAllSurface(cornerRadius: 14)
 
-            VStack(spacing: 5) {
+            VStack(spacing: ClipAllTheme.Spacing.xxs) {
                 ForEach(SettingsSection.allCases) { section in
                     Button {
                         navigation.selection = section
@@ -96,7 +97,7 @@ struct SettingsRootView: View {
                         .foregroundStyle(
                             navigation.selection == section
                                 ? ClipAllTheme.accent
-                                : Color.primary
+                                : ClipAllTheme.textPrimary
                         )
                         .padding(.horizontal, 12)
                         .padding(.vertical, 10)
@@ -111,7 +112,7 @@ struct SettingsRootView: View {
                     )
                 }
             }
-            .padding(.top, ClipAllTheme.Spacing.lg)
+            .padding(.top, ClipAllTheme.Spacing.xl)
 
             Spacer()
 
@@ -120,13 +121,12 @@ struct SettingsRootView: View {
                     .font(.caption.monospacedDigit().weight(.medium))
                 Text("菜单栏与 Dock 均可打开")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ClipAllTheme.textSecondary)
             }
-            .padding(.horizontal, 4)
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 44)
-        .padding(.bottom, 16)
+        .padding(.horizontal, ClipAllTheme.Spacing.md)
+        .padding(.top, 46)
+        .padding(.bottom, ClipAllTheme.Spacing.md)
         .frame(width: ClipAllTheme.Size.settingsSidebar)
         .frame(maxHeight: .infinity)
         .background(ClipAllTheme.sidebar)

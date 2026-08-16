@@ -15,7 +15,7 @@ enum SystemTranslationProvider {
                     id: "translation",
                     label: "译文",
                     value: response.targetText,
-                    annotation: "\(response.sourceLanguage.minimalIdentifier) → \(response.targetLanguage.minimalIdentifier)"
+                    annotation: "\(response.sourceLanguage.minimalIdentifier) · \(response.targetLanguage.minimalIdentifier)"
                 ),
             ]
         )

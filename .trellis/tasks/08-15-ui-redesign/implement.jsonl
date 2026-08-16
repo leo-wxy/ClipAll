@@ -1,0 +1,5 @@
+{"file":".trellis/spec/frontend/index.md","reason":"实施前加载前端规范入口与检查清单"}
+{"file":".trellis/spec/frontend/ui-design-system.md","reason":"批准的浅色、深色、层级、浮窗与交互视觉合同"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"保持取词浮窗几何、焦点、输入和关闭行为合同"}
+{"file":".trellis/spec/backend/local-build-and-release.md","reason":"真实 Applications 安装、签名与验证入口合同"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"修改共享 Theme 和重复设置结构前优先复用现有原语"}

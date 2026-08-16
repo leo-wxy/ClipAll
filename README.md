@@ -6,31 +6,30 @@
 
 <p align="center">macOS 本地选词工具：选中文字，立即复制、粘贴、搜索、翻译或交给插件处理。</p>
 
-<p align="center">macOS 15+ · Apple Silicon · 当前版本 0.0.10</p>
+<p align="center">macOS 15+ · Apple Silicon · 当前版本 0.0.11</p>
 
 ## 界面预览
 
-<p align="center">
-  <img src="Docs/Images/selection-overlay.png" width="600" alt="选中文字后的 ClipAll 浮窗">
-</p>
-<p align="center"><sub>选中文字后，就地复制、粘贴、搜索、翻译或展开更多能力。</sub></p>
-
 <table>
   <tr>
-    <td width="50%"><img src="Docs/Images/selection-settings.jpg" alt="ClipAll 取词设置与应用规则"></td>
-    <td width="50%"><img src="Docs/Images/plugin-management.jpg" alt="ClipAll 插件管理与翻译配置"></td>
+    <td width="50%"><img src="Docs/Images/general-settings-light.jpg" alt="ClipAll 浅色通用设置与外观选择"></td>
+    <td width="50%"><img src="Docs/Images/toolbar-settings-dark.jpg" alt="ClipAll 深色操作栏与浮窗预览"></td>
   </tr>
   <tr>
-    <td align="center">按触发方式和来源 App 控制自动浮窗</td>
-    <td align="center">集中管理内置能力、外置插件与配置</td>
+    <td align="center">浅色通用设置与三态外观选择</td>
+    <td align="center">深色操作栏与浮窗实时预览</td>
   </tr>
 </table>
+
+设置窗口和取词浮窗共用同一套视觉规范；可跟随系统，也可固定使用浅色或深色外观。
 
 ## 功能
 
 - 拖选、双击或 Shift-click 后显示悬浮操作栏，普通单击和普通输入不会触发。
 - 可分别开关拖选与双击/多击，并按 App 设置“跟随全局”“仅拖选”或“永不自动显示”。
-- 固定提供复制、粘贴、搜索和翻译，并按内容推荐其他能力。
+- 固定提供复制、粘贴、搜索和翻译，并按内容推荐其他能力；内置与外置能力统一在“插件”中管理。
+- 支持“跟随系统”“浅色”“深色”三种外观，设置窗口与取词浮窗同步切换。
+- 操作栏可预览并调整已固定能力的顺序，最多固定四个插件能力。
 - 优先通过 Accessibility 读取选区；微信等自绘控件可用临时复制回退，完成后恢复剪贴板。
 - 支持 Apple 设备端翻译和用户配置的 HTTPS OpenAI-compatible API。
 - 支持本地 `.clipallplugin` 的导入、配置、启停、卸载、重载和调试。
@@ -52,11 +51,13 @@ Release 始终提供 arm64 ZIP，并在 GitHub Runner 支持磁盘镜像时同�
 
 ## 使用
 
-1. 启动 ClipAll，在“设置 → 取词”确认自动监听和需要的触发方式已开启。
+1. 启动 ClipAll；可在“设置 → 通用”选择外观，并在“设置 → 取词”确认自动监听和需要的触发方式已开启。
 2. 在其他 App 中拖选、双击或 Shift-click 选择文字。
 3. 从浮层执行操作，或展开“更多”查找插件能力。
 
 “自动监听文字选择”是总开关；关闭后鼠标自动取词和全局快捷键都会停止，菜单栏“显示当前选区”仍可手动使用。默认快捷键是 `⌃⌥Space`。触发方式、应用规则和兼容取词统一在“设置 → 取词”管理；密码框、安全输入框和无法复制的图像内容不会进入回退。
+
+ClipAll 是菜单栏应用：关闭最后一个设置窗口不会退出进程；通过菜单栏或 Dock 可再次打开设置，显式退出仍使用菜单或 `⌘Q`。
 
 ## 插件
 

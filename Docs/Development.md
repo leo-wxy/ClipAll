@@ -1,6 +1,6 @@
 # ClipAll 本地开发与验收
 
-当前源码版本由根目录 [`VERSION`](../VERSION) 管理（`0.0.10`）。修改版本时必须同步 `Support/ClipAll-Info.plist` 的 `CFBundleShortVersionString` 和 `CFBundleVersion`，然后运行：
+当前源码版本由根目录 [`VERSION`](../VERSION) 管理（`0.0.11`）。修改版本时必须同步 `Support/ClipAll-Info.plist` 的 `CFBundleShortVersionString` 和 `CFBundleVersion`，然后运行：
 
 ```sh
 ./Scripts/check-version.sh
@@ -45,10 +45,10 @@ App 第一次取词需要“系统设置 → 隐私与安全性 → 辅助功能
 
 ## 手动主流程
 
-1. 启动 App，确认通用设置中的辅助功能权限为“已授权”，并开启自动取词。
+1. 启动 App，确认通用设置中的辅助功能权限为“已授权”，并在“取词”中开启自动监听。
 2. 在 TextEdit、Safari、一个 Chromium/Electron App 和微信中分别拖选、双击及 Shift-click；确认 AX 可用时直接显示，AX 不提供选区但 `⌘C` 可用时进入兼容取词，且原剪贴板保持不变。
 3. 对已高亮文字普通单击并继续输入，确认不弹旧选区、不产生双倍输入；安全输入框不得捕获。
-4. 在“设置 → 通用”关闭兼容取词并排除一个 App，确认两种情况都只运行 AX；重新启动后开关和名单保持。
+4. 在“设置 → 取词”关闭兼容取词并排除一个 App，确认两种情况都只运行 AX；重新启动后开关和名单保持。
 5. 验证复制、粘贴、搜索、翻译、推荐、“更多”搜索、Esc/外点关闭以及最近使用。
 6. 在“设置 → 插件”安装时间工具示例，再选择 `1712345678` 与 `2024-04-05T19:34:38Z`，分别执行两个方向并复制结果。
 7. 验证插件停用、重新启用时保留配置；卸载后重新安装恢复 manifest 默认值。

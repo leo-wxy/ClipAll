@@ -8,7 +8,8 @@ struct SelectionOverlayView: View {
 
     @ObservedObject var store: SelectionOverlayStore
     let onToggleMore: () -> Void
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,13 +32,22 @@ struct SelectionOverlayView: View {
         .frame(width: Self.expandedWidth)
         .background {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(overlaySurface)
-                .shadow(color: overlayShadow, radius: 12, y: 5)
+                .fill(ClipAllTheme.overlaySurface)
+                .shadow(
+                    color: ClipAllTheme.shadowFloating,
+                    radius: ClipAllTheme.Shadow.floatingRadius,
+                    y: ClipAllTheme.Shadow.floatingY
+                )
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .stroke(overlayBorder, lineWidth: 0.75)
+                .stroke(
+                    colorSchemeContrast == .increased
+                        ? ClipAllTheme.textSecondary
+                        : ClipAllTheme.overlayBorder,
+                    lineWidth: colorSchemeContrast == .increased ? 1.25 : 0.75
+                )
         }
         .onExitCommand {
             if store.isMorePresented {
@@ -54,6 +64,8 @@ struct SelectionOverlayView: View {
                 title: "复制",
                 symbolName: "doc.on.doc",
                 isLoading: false,
+                isActive: false,
+                isCapability: false,
                 action: store.copySelection
             )
 
@@ -61,6 +73,8 @@ struct SelectionOverlayView: View {
                 title: "粘贴",
                 symbolName: "doc.on.clipboard",
                 isLoading: false,
+                isActive: false,
+                isCapability: false,
                 action: store.pasteClipboard
             )
 
@@ -68,22 +82,31 @@ struct SelectionOverlayView: View {
                 actionButton(
                     title: capability.name,
                     symbolName: capability.symbolName,
-                    isLoading: isExecuting(capability.id)
+                    isLoading: isExecuting(capability.id),
+                    isActive: activeCapabilityID == capability.id,
+                    isCapability: true
                 ) {
                     store.execute(capability.id)
                 }
             }
 
             Rectangle()
-                .fill(Color.primary.opacity(0.12))
+                .fill(ClipAllTheme.separator)
                 .frame(width: 1, height: 18)
                 .padding(.horizontal, 3)
 
             Button(action: onToggleMore) {
-                Image(systemName: "plus")
+                Image(
+                    systemName: reduceMotion && store.isMorePresented ? "xmark" : "plus"
+                )
                     .font(.system(size: 12, weight: .medium))
-                    .rotationEffect(.degrees(store.isMorePresented ? 45 : 0))
-                    .animation(.easeOut(duration: 0.14), value: store.isMorePresented)
+                    .rotationEffect(
+                        .degrees(!reduceMotion && store.isMorePresented ? 45 : 0)
+                    )
+                    .animation(
+                        reduceMotion ? nil : .easeOut(duration: 0.14),
+                        value: store.isMorePresented
+                    )
                     .frame(width: 28, height: 28)
                     .contentShape(Rectangle())
             }
@@ -132,7 +155,13 @@ struct SelectionOverlayView: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(ClipAllTheme.accent)
                     .frame(width: 22, height: 22)
-                    .background(ClipAllTheme.accentSoft, in: RoundedRectangle(cornerRadius: 6))
+                    .background(
+                        ClipAllTheme.accentSoft,
+                        in: RoundedRectangle(
+                            cornerRadius: ClipAllTheme.Radius.control,
+                            style: .continuous
+                        )
+                    )
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 5) {
@@ -314,12 +343,16 @@ struct SelectionOverlayView: View {
         title: String,
         symbolName: String,
         isLoading: Bool,
+        isActive: Bool,
+        isCapability: Bool,
         action: @escaping () -> Void
     ) -> some View {
         OverlayActionButton(
             title: title,
             symbolName: symbolName,
             isLoading: isLoading,
+            isActive: isActive,
+            isCapability: isCapability,
             action: action
         )
     }
@@ -335,7 +368,7 @@ struct SelectionOverlayView: View {
                 ProgressView().controlSize(.small)
             } else {
                 Image(systemName: symbolName)
-                    .foregroundStyle(isError ? Color.red : ClipAllTheme.accent)
+                    .foregroundStyle(isError ? ClipAllTheme.error : ClipAllTheme.accent)
             }
             Text(text)
                 .font(.callout)
@@ -350,29 +383,26 @@ struct SelectionOverlayView: View {
         ClipAllTheme.Radius.overlayChrome
     }
 
-    private var overlaySurface: Color {
-        colorScheme == .dark
-            ? Color(red: 0.105, green: 0.11, blue: 0.125).opacity(0.98)
-            : Color(nsColor: .windowBackgroundColor).opacity(0.98)
-    }
-
-    private var overlayBorder: Color {
-        colorScheme == .dark
-            ? Color.white.opacity(0.14)
-            : Color.black.opacity(0.11)
-    }
-
-    private var overlayShadow: Color {
-        colorScheme == .dark
-            ? Color.black.opacity(0.48)
-            : Color.black.opacity(0.16)
-    }
-
     private func isExecuting(_ id: CapabilityID) -> Bool {
         if case let .executing(executingID) = store.phase {
             return executingID == id
         }
         return false
+    }
+
+    private var activeCapabilityID: CapabilityID? {
+        switch store.phase {
+        case .ready:
+            nil
+        case let .failure(capabilityID, _):
+            capabilityID
+        case let .executing(capabilityID):
+            capabilityID
+        case let .result(capabilityID, _):
+            capabilityID
+        case let .translation(capabilityID, _):
+            capabilityID
+        }
     }
 }
 
@@ -380,6 +410,8 @@ private struct OverlayActionButton: View {
     let title: String
     let symbolName: String
     let isLoading: Bool
+    let isActive: Bool
+    let isCapability: Bool
     let action: () -> Void
 
     var body: some View {
@@ -390,9 +422,10 @@ private struct OverlayActionButton: View {
                         .controlSize(.small)
                         .frame(width: 14)
                 } else {
-                    Image(systemName: symbolName)
-                        .font(.system(size: 13, weight: .medium))
-                        .frame(width: 14)
+                    ClipAllToolbarGlyph(
+                        symbolName: symbolName,
+                        isAccented: isCapability && !isActive
+                    )
                 }
                 Text(title)
                     .font(.system(size: 12, weight: .medium))
@@ -403,47 +436,119 @@ private struct OverlayActionButton: View {
             .frame(maxWidth: .infinity, minHeight: 28)
             .contentShape(Rectangle())
         }
-        .buttonStyle(OverlayChromeButtonStyle())
+        .buttonStyle(OverlayChromeButtonStyle(isActive: isActive))
+        .accessibilityAddTraits(isActive ? .isSelected : [])
         .accessibilityLabel(title)
     }
 }
 
 private struct OverlayChromeButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background {
-                ZStack {
-                    ClipAllHoverHighlight(
-                        cornerRadius: ClipAllTheme.Radius.overlayChrome,
-                        opacity: 0.075
-                    )
-                    if configuration.isPressed {
+    var isActive = false
+
+    func makeBody(configuration: Configuration) -> Body {
+        Body(configuration: configuration, isActive: isActive)
+    }
+
+    fileprivate struct Body: View {
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+        @Environment(\.isEnabled) private var isEnabled
+        @Environment(\.isFocused) private var isFocused
+        let configuration: Configuration
+        let isActive: Bool
+
+        var body: some View {
+            configuration.label
+                .foregroundStyle(isActive ? ClipAllTheme.onAccent : ClipAllTheme.textPrimary)
+                .background {
+                    ZStack {
+                        if isActive {
+                            RoundedRectangle(
+                                cornerRadius: ClipAllTheme.Radius.overlayChrome,
+                                style: .continuous
+                            )
+                            .fill(ClipAllTheme.accent)
+                        }
+                        ClipAllHoverHighlight(
+                            cornerRadius: ClipAllTheme.Radius.overlayChrome,
+                            opacity: isActive
+                                ? ClipAllTheme.Interaction.activeChromeHoverOpacity
+                                : ClipAllTheme.Interaction.chromeHoverOpacity
+                        )
+                        if configuration.isPressed {
+                            RoundedRectangle(
+                                cornerRadius: ClipAllTheme.Radius.overlayChrome,
+                                style: .continuous
+                            )
+                            .fill(
+                                isActive
+                                    ? ClipAllTheme.accentPressedFill
+                                    : ClipAllTheme.overlayPressedFill
+                            )
+                        }
+                    }
+                }
+                .overlay {
+                    if isFocused {
                         RoundedRectangle(
                             cornerRadius: ClipAllTheme.Radius.overlayChrome,
                             style: .continuous
                         )
-                            .fill(Color.primary.opacity(0.12))
+                        .stroke(ClipAllTheme.focusRing, lineWidth: 2)
                     }
                 }
-            }
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.easeOut(duration: 0.10), value: configuration.isPressed)
+                .scaleEffect(!reduceMotion && configuration.isPressed ? 0.97 : 1)
+                .opacity(
+                    isEnabled ? 1 : ClipAllTheme.Interaction.disabledOpacity
+                )
+                .animation(
+                    reduceMotion ? nil : .easeOut(duration: 0.10),
+                    value: configuration.isPressed
+                )
+        }
     }
 }
 
 private struct OverlayRowButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background {
-                ZStack {
-                    ClipAllHoverHighlight(cornerRadius: 8, opacity: 0.07)
-                    if configuration.isPressed {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.primary.opacity(0.12))
+    func makeBody(configuration: Configuration) -> Body {
+        Body(configuration: configuration)
+    }
+
+    fileprivate struct Body: View {
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+        @Environment(\.isFocused) private var isFocused
+        let configuration: Configuration
+
+        var body: some View {
+            configuration.label
+                .background {
+                    ZStack {
+                        ClipAllHoverHighlight(
+                            cornerRadius: ClipAllTheme.Radius.control,
+                            opacity: ClipAllTheme.Interaction.chromeHoverOpacity
+                        )
+                        if configuration.isPressed {
+                            RoundedRectangle(
+                                cornerRadius: ClipAllTheme.Radius.control,
+                                style: .continuous
+                            )
+                            .fill(ClipAllTheme.overlayPressedFill)
+                        }
                     }
                 }
-            }
-            .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
+                .overlay {
+                    if isFocused {
+                        RoundedRectangle(
+                            cornerRadius: ClipAllTheme.Radius.control,
+                            style: .continuous
+                        )
+                        .stroke(ClipAllTheme.focusRing, lineWidth: 2)
+                    }
+                }
+                .animation(
+                    reduceMotion ? nil : .easeOut(duration: 0.08),
+                    value: configuration.isPressed
+                )
+        }
     }
 }
 
