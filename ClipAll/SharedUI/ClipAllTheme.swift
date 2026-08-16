@@ -583,24 +583,49 @@ struct ClipAllButtonStyle: ButtonStyle {
 struct ClipAllSettingsSection<Content: View>: View {
     let title: String
     let subtitle: String?
+    let helpText: String?
     let content: Content
+    @State private var isShowingHelp = false
 
     init(
         _ title: String,
         subtitle: String? = nil,
+        helpText: String? = nil,
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.subtitle = subtitle
+        self.helpText = helpText
         self.content = content()
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: ClipAllTheme.Spacing.sm) {
             VStack(alignment: .leading, spacing: ClipAllTheme.Spacing.xxs) {
-                Text(title)
-                    .font(ClipAllTheme.Typography.sectionTitle)
-                    .foregroundStyle(ClipAllTheme.textPrimary)
+                HStack(spacing: ClipAllTheme.Spacing.xxs) {
+                    Text(title)
+                        .font(ClipAllTheme.Typography.sectionTitle)
+                        .foregroundStyle(ClipAllTheme.textPrimary)
+                    if let helpText {
+                        Button {
+                            isShowingHelp.toggle()
+                        } label: {
+                            Image(systemName: "questionmark.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(ClipAllTheme.textSecondary)
+                        .help("查看\(title)说明")
+                        .accessibilityLabel("查看\(title)说明")
+                        .popover(isPresented: $isShowingHelp) {
+                            Text(helpText)
+                                .font(ClipAllTheme.Typography.body)
+                                .foregroundStyle(ClipAllTheme.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(ClipAllTheme.Spacing.md)
+                                .frame(width: 320)
+                        }
+                    }
+                }
                 if let subtitle {
                     Text(subtitle)
                         .font(ClipAllTheme.Typography.supporting)

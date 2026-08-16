@@ -12,7 +12,6 @@ struct SelectionSettingsView: View {
         ) {
             automaticDisplaySection
             applicationRulesSection
-            fixedFiltersSection
             compatibilitySection
         }
     }
@@ -48,7 +47,8 @@ struct SelectionSettingsView: View {
     private var applicationRulesSection: some View {
         ClipAllSettingsSection(
             "应用规则",
-            subtitle: "为常用 App 覆盖自动显示规则；快捷键和菜单主动取词不受影响。"
+            subtitle: "为常用 App 覆盖自动显示规则；快捷键和菜单主动取词不受影响。",
+            helpText: "普通单击、空白、重复、失效或来源已切换的选区，密码框等安全区域，按钮、文件等非文字对象，以及无法安全恢复的剪贴板操作，始终不会显示浮窗。"
         ) {
             VStack(alignment: .leading, spacing: ClipAllTheme.Spacing.sm) {
                 if settings.selectionApplicationBundleIdentifiers.isEmpty {
@@ -71,21 +71,6 @@ struct SelectionSettingsView: View {
                     Label("添加应用", systemImage: "plus")
                 }
                 .buttonStyle(ClipAllButtonStyle(variant: .secondary))
-            }
-        }
-    }
-
-    private var fixedFiltersSection: some View {
-        ClipAllSettingsSection(
-            "始终不显示",
-            subtitle: "以下安全过滤固定生效，避免旧选区或非文字对象误触。"
-        ) {
-            VStack(alignment: .leading, spacing: ClipAllTheme.Spacing.xs) {
-                fixedFilter("普通单击或未形成有效选择意图")
-                fixedFilter("空白、重复、失效选区或来源 App 已切换")
-                fixedFilter("密码框和其他安全输入区域")
-                fixedFilter("按钮、标签页、菜单、文件、文件夹和图片")
-                fixedFilter("剪贴板超时、取消、竞争写入或无法安全恢复")
             }
         }
     }
@@ -179,7 +164,6 @@ struct SelectionSettingsView: View {
                     .labelsHidden()
                     .pickerStyle(.menu)
                     .frame(width: 142)
-                    .clipAllControlSlot(width: 142)
                     .accessibilityLabel("\(applicationName)自动显示策略")
                 }
 
@@ -194,7 +178,6 @@ struct SelectionSettingsView: View {
                     .labelsHidden()
                     .toggleStyle(.switch)
                     .fixedSize()
-                    .clipAllControlSlot(width: 42)
                     .accessibilityLabel("\(applicationName)兼容取词")
                 }
 
@@ -207,22 +190,6 @@ struct SelectionSettingsView: View {
                 .help("移除 \(applicationName) 的规则")
                 .accessibilityLabel("移除 \(applicationName) 的规则")
             }
-        }
-    }
-
-    private func fixedFilter(_ title: String) -> some View {
-        ClipAllSettingsRow(minimumHeight: 46) {
-            HStack(spacing: ClipAllTheme.Spacing.sm) {
-                Image(systemName: "checkmark.shield.fill")
-                    .foregroundStyle(ClipAllTheme.success)
-                    .frame(width: 20)
-                Text(title)
-                    .font(ClipAllTheme.Typography.body)
-                    .foregroundStyle(ClipAllTheme.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        } trailing: {
-            ClipAllTag("固定", tone: .muted, systemImage: "checkmark")
         }
     }
 
