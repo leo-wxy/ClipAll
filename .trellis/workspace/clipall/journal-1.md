@@ -88,3 +88,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 5: 发布 ClipAll 0.0.11 UI 重设计
+
+**Date**: 2026-08-16
+**Task**: 发布 ClipAll 0.0.11 UI 重设计
+**Branch**: `main`
+
+### Summary
+
+统一全部设置页与取词浮窗设计，移除独立能力中心，增加三态外观，修复关闭最后窗口退出与外观旧值问题，并更新 README、版本和发布说明。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9cc80d7` | (see git log) |
+
+### Status
+
+[OK] **Completed**
