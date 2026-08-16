@@ -6,14 +6,14 @@ PROJECT_ROOT="${0:A:h:h}"
 PLUGIN_PATH="${1:-$PROJECT_ROOT/Plugins/Examples/TimestampTools.clipallplugin}"
 
 print "==> verify-product-structure"
-if rg -n 'CapabilityCenter|capability-center|能力中心' \
+if /usr/bin/grep -REn 'CapabilityCenter|capability-center|能力中心' \
   "$PROJECT_ROOT/ClipAll" \
   "$PROJECT_ROOT/Docs/Architecture.md"; then
   print -u2 "独立能力中心不得重新进入当前产品结构"
   exit 1
 fi
 
-if ! rg -q 'setPinned\(capability\.id, isPinned:' \
+if ! /usr/bin/grep -Fq 'setPinned(capability.id, isPinned:' \
   "$PROJECT_ROOT/ClipAll/Features/PluginManagement/PluginsSettingsView.swift"; then
   print -u2 "插件详情必须保留能力固定入口"
   exit 1
