@@ -3,7 +3,7 @@
   "name": "runner-memory-transport",
   "title": "外置插件 Runner 无落盘通信",
   "description": "消除外置插件执行期间对临时 stdin/stdout/stderr 文件的依赖，使选中文字和插件结果不写入磁盘，同时保持现有协议、超时、取消、大小限制与错误语义。",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -21,5 +21,6 @@
   "parent": null,
   "relatedFiles": [],
   "notes": "",
-  "meta": {}
+  "meta": {},
+  "completedAt": "2026-08-19"
 }
