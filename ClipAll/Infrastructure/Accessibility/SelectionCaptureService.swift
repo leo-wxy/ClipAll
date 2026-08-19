@@ -71,8 +71,18 @@ enum SelectionHitClassifier {
         "AXSelectedTextRange",
     ]
 
-    static func allowsClipboardFallback(in path: [SelectionHitEvidenceNode]) -> Bool {
-        guard !path.isEmpty else { return true }
+    static func allowsClipboardFallback(
+        in path: [SelectionHitEvidenceNode],
+        policy: SelectionFallbackPolicy = .textHitRequired
+    ) -> Bool {
+        switch policy {
+        case .disabled:
+            return false
+        case .enabled:
+            return true
+        case .textHitRequired:
+            guard !path.isEmpty else { return false }
+        }
 
         var foundTextSelectionSemantics = false
         for node in path {
@@ -151,10 +161,10 @@ final class SelectionCaptureService: SelectionCapturing {
                 throw error
             }
 
-            if fallbackPolicy == .rejectKnownNonText,
-               !SelectionHitClassifier.allowsClipboardFallback(
-                   in: hitEvidencePath(at: triggerLocation)
-               ) {
+            if !SelectionHitClassifier.allowsClipboardFallback(
+                in: hitEvidencePath(at: triggerLocation),
+                policy: fallbackPolicy
+            ) {
                 Self.logger.info(
                     "Clipboard fallback suppressed: reason=pointerTargetNotTextual, bundle=\(source.bundleIdentifier ?? "unknown", privacy: .public)"
                 )

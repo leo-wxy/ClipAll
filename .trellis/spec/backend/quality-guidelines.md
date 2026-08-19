@@ -232,8 +232,8 @@ SelectionMonitor.capturePointerSelection(
 
 `PointerSelectionIntent.fallbackPolicy` owns the gesture policy:
 
-- drag -> `enabled`
-- multi-click -> `rejectKnownNonText`
+- drag -> `textHitRequired`
+- multi-click -> `textHitRequired`
 - shift-click -> `disabled`
 
 ### 3. Contracts
@@ -250,8 +250,9 @@ SelectionMonitor.capturePointerSelection(
 - For multi-click AX results with selection bounds, require the trigger point to
   intersect those bounds with the existing drag-distance tolerance. A focused
   element may retain a stale non-empty AX selection after the user clicks elsewhere.
-- For multi-click, an empty hit path means AX cannot classify the surface; it
-  may continue to the existing constrained clipboard fallback.
+- Automatic drag and multi-click require positive text-selection evidence in a
+  non-empty hit path; an empty or known non-text path rejects before synthetic
+  `Command-C`.
 - Any blocking role/action rejects fallback. Scan the complete bounded path so
   a text-like child cannot hide an ancestor `AXRow`, Tab, button, or menu item.
 - A non-empty path with no selection semantics rejects fallback.
@@ -281,8 +282,9 @@ SelectionMonitor.capturePointerSelection(
 | Frontmost App changes during settle/capture | Invalidate; publish nothing from the new App |
 | AX selection succeeds | Publish AX selection; do not send copy |
 | Multi-click AX bounds do not contain the trigger point | Invalidate as a stale focused selection |
-| Drag + fallback-eligible AX failure | Try constrained clipboard fallback |
-| Multi-click + empty AX hit path | Try constrained clipboard fallback |
+| Drag + text AX hit path | Try constrained clipboard fallback |
+| Drag + empty or known non-text hit path | Suppress before sending copy |
+| Multi-click + empty AX hit path | Suppress before sending copy |
 | Multi-click + text path | Try constrained clipboard fallback |
 | Multi-click + blocking role/action | Suppress before sending copy |
 | Multi-click + non-empty path without selection semantics | Suppress before sending copy |
@@ -293,8 +295,8 @@ SelectionMonitor.capturePointerSelection(
 
 ### 5. Good / Base / Bad Cases
 
-- Good: POPO exposes no focused or hit AX element; explicit multi-click enters
-  the existing clipboard fallback and publishes its pure-text result.
+- Good: POPO exposes no focused or hit AX element; automatic pointer capture
+  suppresses fallback, while explicit hotkey/menu capture remains available.
 - Base: VSCode / VSCodium text surfaces expose selection semantics and continue
   to work.
 - Good: IDE file-tree rows and Tabs expose blocking or non-text evidence and
@@ -303,7 +305,8 @@ SelectionMonitor.capturePointerSelection(
   the same App remains available through the explicit hotkey or menu command.
 - Good: a Qt private image-path flavor survives a successful text fallback
   byte-for-byte without the selected text touching disk.
-- Bad: treat an empty AX path as proof that the pointer target is non-text.
+- Bad: send a synthetic copy when an automatic pointer trigger has no positive
+  text-selection evidence.
 - Bad: allow any non-empty hit path without checking its complete ancestry.
 - Bad: special-case a bundle identifier or add a fixed delay instead of using
   observable AX evidence.
@@ -311,9 +314,9 @@ SelectionMonitor.capturePointerSelection(
 ### 6. Tests Required
 
 - `Scripts/verify-overlay-state.sh` must assert:
-  - empty hit paths allow constrained fallback;
+  - empty hit paths reject automatic drag and multi-click fallback;
   - known text surfaces allow fallback;
-  - file-tree, Tab, button, and non-empty non-text paths reject fallback;
+  - image, file-tree, Tab, button, and non-empty non-text paths reject fallback;
   - drag, multi-click, shift-click, and normal-click policies remain stable;
   - global and per-App policy defaults, persistence, deletion, and invalid-value
     sanitization remain stable;
@@ -336,12 +339,12 @@ SelectionMonitor.capturePointerSelection(
 #### Wrong
 
 ```swift
-// Empty means AX supplied no evidence, not that the surface is non-text.
-guard !path.isEmpty else { return false }
+// Empty means AX supplied no evidence, not that the pointer selected text.
+guard !path.isEmpty else { return true }
 ```
 
 #### Correct
 
 ```swift
-guard !path.isEmpty else { return true }
+guard !path.isEmpty else { return false }
 ```

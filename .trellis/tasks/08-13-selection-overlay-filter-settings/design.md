@@ -65,7 +65,7 @@ enum SelectionAutomaticDisplayPolicy: String, Codable {
 1. `PointerSelectionGesture` 只识别意图，不读取设置。
 2. `SelectionMonitor` 在 mouse-up 后读取当前前台 Bundle ID，并调用注入的策略闭包。
 3. 策略拒绝时记录不含正文的 `userPolicy` 日志并使旧浮窗失效，不调用 `SelectionCapturing`。
-4. 策略允许时保持现有 45ms settle、AX、hit classifier、兼容取词、去重和浮窗链路。
+4. 策略允许时保持现有 45ms settle、AX、hit classifier、兼容取词、去重和浮窗链路；自动拖选与多击统一使用 `textHitRequired`，图片/控件及空 AX 路径在合成 `Command-C` 前拒绝，快捷键与菜单仍可使用完整回退。
 5. 快捷键与菜单不调用鼠标策略闭包。
 
 `AppEnvironment` 继续作为唯一装配点，闭包实时读取 `SettingsStore`，设置修改无需重启 monitor。
@@ -84,9 +84,8 @@ enum SelectionAutomaticDisplayPolicy: String, Codable {
    - 空状态说明。
    - `.app` 选择按钮。
    - 每行显示图标、名称、Bundle ID、三态 Picker、兼容取词开关与移除按钮。
-3. **始终不显示**
-   - 只读列举固定安全过滤，不提供开关。
-4. **高级：兼容取词**
+   - 标题旁帮助按钮收束固定安全过滤说明，不单独占用卡片。
+3. **高级：兼容取词**
    - 全局复制回退开关与内存恢复说明。
 
 ### 通用页
@@ -101,6 +100,7 @@ enum SelectionAutomaticDisplayPolicy: String, Codable {
 - 纯策略矩阵验证：全局开关、三态 App 策略、快捷路径边界。
 - UserDefaults 验证：默认值、重启持久化、损坏值、旧 fallback 排除兼容、删除规则。
 - 捕获链验证：策略拒绝时不调用 capture；允许时现有手势与 fallback policy 不变。
+- 非文本预过滤验证：自动拖选、多击的图片命中和空 AX 路径不得进入剪贴板回退；快捷键和菜单主动取词继续使用完整回退。
 - 设置 UI 通过 Swift 构建和 `/Applications/ClipAll.app` 人工检查。
 
 ## Rollback

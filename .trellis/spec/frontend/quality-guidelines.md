@@ -134,8 +134,8 @@ if executor.executionPresentation == .external {
   four-point drag threshold.
 - `PointerSelectionGesture.end(at:clickCount:isShiftPressed:) -> PointerSelectionIntent?`
   returns `.drag`, `.multiClick`, `.shiftClick`, or `nil` and always resets state.
-- `PointerSelectionIntent.fallbackPolicy` maps `.drag` to `.enabled`,
-  `.multiClick` to `.rejectKnownNonText`, and `.shiftClick` to `.disabled`.
+- `PointerSelectionIntent.fallbackPolicy` maps `.drag` and `.multiClick` to
+  `.textHitRequired`, and `.shiftClick` to `.disabled`.
 - `SelectionAutomaticDisplayPolicy` is `followGlobal`, `dragOnly`, or `disabled`.
 - `SettingsStore.allowsAutomaticDisplay(for:bundleIdentifier:)` is the single
   global/per-App pointer-policy decision.
@@ -165,9 +165,9 @@ if executor.executionPresentation == .external {
   chain for standard selected text/range and Text Marker selection.
 - If AX fails after pointer drag, registered hotkey, or menu capture,
   compatibility capture may send one targeted `⌘C` only when enabled and the
-  source bundle is not excluded. Multi-click additionally requires the pointer
-  hit ancestry to expose selected-text attributes or character-range semantics;
-  the complete bounded path is scanned before accepting that evidence. Hard
+  source bundle is not excluded. Automatic drag and multi-click require a
+  non-empty hit ancestry with selected-text or character-range semantics; the
+  complete bounded path is scanned before accepting that evidence. Hard
   control roles/actions and paths ending at a window are rejected before
   copying. `AXShowMenu` alone is not a blocker because Electron text surfaces
   expose it together with real selection semantics.
@@ -198,8 +198,9 @@ if executor.executionPresentation == .external {
 | Frontmost App changes after mouse-up | Invalidate before publishing any selection |
 | Drag below four points | No capture |
 | Drag at least four points | Capture after the short selection-settle delay |
+| Drag over an empty or known image/control target | Reject before `⌘C`; preserve the clipboard |
 | Double/triple click with AX text | Capture after mouse-up without fallback |
-| Double/triple click with non-AX text semantics at the pointer | Use filtered fallback and publish text |
+| Double/triple click with no AX text evidence at the pointer | Reject before `⌘C`; keep explicit hotkey/menu fallback |
 | VSCode text path with selection attributes and `AXShowMenu` | Accept after the complete path has no hard control role |
 | Double/triple click on an IDE tab while editor text remains selected | Reject before `⌘C`; never publish stale editor text |
 | Double/triple click on a typed non-text object | Reject copied object; no overlay |
@@ -221,8 +222,8 @@ if executor.executionPresentation == .external {
 - Good: a WebView exposes selection on an `AXGroup`; pointer hit-test plus
   ancestor traversal resolves it and presents the panel.
 - Base: TextEdit drag selection resolves standard selected text and range.
-- Good: double-clicking a Finder or IDE folder may copy once after AX fails, but
-  the file/object type rejects its attached string and restores the clipboard.
+- Good: double-clicking a Finder or IDE folder is rejected before copy when the
+  hit path supplies no positive text-selection evidence.
 - Good: double-clicking an IDE tab is rejected before copy when its hit path has
   no text-selection semantics, even if the focused editor retains a selection.
 - Bad: every global mouse-up captures whatever text remains highlighted.

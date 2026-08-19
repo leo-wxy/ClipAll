@@ -27,10 +27,15 @@ Scripts/verify-overlay-state.sh
   - 注入一个鼠标意图策略闭包。
   - 在 pointer capture 调度前按当前前台 Bundle ID 拒绝禁用规则。
   - 拒绝时不调用 AX 或剪贴板，不影响 hotkey/manual。
+- `ClipAll/Infrastructure/Accessibility/PointerSelectionGesture.swift`
+  - 自动拖选与多击统一使用 `textHitRequired`。
+- `ClipAll/Infrastructure/Accessibility/SelectionCaptureService.swift`
+  - 自动拖选或多击命中路径为空、为非文字时在剪贴板回退前拒绝；快捷键与菜单主动取词不受影响。
 - `ClipAll/App/AppEnvironment.swift`
   - 将 `SettingsStore` 的实时策略注入 monitor。
 - `Verification/OverlayStateVerification.swift`
   - 使用最小 fake 断言禁用策略不触发捕获，快捷路径语义保持。
+  - 断言自动拖选、多击的空路径与图片命中不会发送合成复制快捷键。
 
 定向验证：
 
@@ -43,7 +48,7 @@ Scripts/verify-overlay-state.sh
 新增或修改：
 
 - `ClipAll/Features/Settings/SelectionSettingsView.swift`
-  - 自动显示、应用规则、固定过滤、兼容取词四个卡片。
+  - 自动显示、应用规则、兼容取词三个区块；固定过滤收束为应用规则标题旁帮助说明。
   - 复用系统 App 选择器和现有主题。
 - `ClipAll/Features/Settings/GeneralSettingsView.swift`
   - 只保留快捷键、应用入口与权限。
@@ -80,7 +85,7 @@ Scripts/install-local-app.sh
 2. 全局关闭多击：VSCode/Codex 双击不弹，拖选可弹。
 3. App 设为“仅拖选”：该 App 双击不弹、拖选可弹。
 4. App 设为“永不自动显示”：鼠标选择不弹，快捷键仍可主动显示。
-5. 文件树、Tab、按钮、安全输入与图片对象继续不误触。
+5. 文件树、Tab、按钮、安全输入与图片对象继续不误触；拖动图片或 AX 不可分类区域不会触发自动复制，也不会改写现有剪贴板。
 6. 设置页重启后保持，删除 App 规则后恢复全局。
 
 ## Finish Gate

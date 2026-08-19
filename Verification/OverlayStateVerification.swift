@@ -476,7 +476,10 @@ enum OverlayStateVerification {
             dragIntent == .drag,
             "达到阈值的拖选应触发取词"
         )
-        try expect(dragIntent?.fallbackPolicy == .enabled, "拖选应允许复制回退")
+        try expect(
+            dragIntent?.fallbackPolicy == .textHitRequired,
+            "拖选应只在命中路径提供文字证据时允许复制回退"
+        )
 
         gesture.begin(at: .zero)
         let multiClickIntent = gesture.end(at: .zero, clickCount: 2)
@@ -485,8 +488,8 @@ enum OverlayStateVerification {
             "双击选词应触发取词"
         )
         try expect(
-            multiClickIntent?.fallbackPolicy == .rejectKnownNonText,
-            "双击 AX 无文字时应拒绝已知非文字命中"
+            multiClickIntent?.fallbackPolicy == .textHitRequired,
+            "双击应只在命中路径提供文字证据时允许复制回退"
         )
 
         gesture.begin(at: .zero)
@@ -497,8 +500,8 @@ enum OverlayStateVerification {
             "多击伴随轻微移动时仍应保持 multiClick 意图"
         )
         try expect(
-            movedMultiClickIntent?.fallbackPolicy == .rejectKnownNonText,
-            "多击伴随轻微移动时仍应拒绝已知非文字命中"
+            movedMultiClickIntent?.fallbackPolicy == .textHitRequired,
+            "多击伴随轻微移动时仍应要求文字命中证据"
         )
 
         gesture.begin(at: .zero)
@@ -686,7 +689,7 @@ enum OverlayStateVerification {
         )
         try await waitUntil("允许的多击未触发捕获") { capture.callCount == 1 }
         try expect(
-            capture.fallbackPolicies == [.rejectKnownNonText],
+            capture.fallbackPolicies == [.textHitRequired],
             "多击通过门禁后必须保留原 fallback policy"
         )
         try expect(selectionCount == 1, "允许的自动捕获应发布一次选区")
@@ -775,8 +778,11 @@ enum OverlayStateVerification {
 
     private static func verifySelectionHitClassifier() throws {
         try expect(
-            SelectionHitClassifier.allowsClipboardFallback(in: []),
-            "AX 完全不提供鼠标命中链时应允许受约束的复制回退"
+            !SelectionHitClassifier.allowsClipboardFallback(
+                in: [],
+                policy: .textHitRequired
+            ),
+            "自动指针取词的 AX 命中链为空时不得发送复制快捷键"
         )
 
         let codexTextPath = [
@@ -844,6 +850,19 @@ enum OverlayStateVerification {
         try expect(
             !SelectionHitClassifier.allowsClipboardFallback(in: ideTabPath),
             "无选区能力的 IDE Tab 不得复制焦点编辑器里的残留选区"
+        )
+
+        let imagePath = [
+            SelectionHitEvidenceNode(
+                role: "AXImage",
+                actions: [],
+                attributes: ["AXDescription"]
+            ),
+            SelectionHitEvidenceNode(role: "AXGroup", actions: [], attributes: []),
+        ]
+        try expect(
+            !SelectionHitClassifier.allowsClipboardFallback(in: imagePath),
+            "图片目标必须在发送复制快捷键前被拒绝"
         )
 
         let vscodeTreePath = [
