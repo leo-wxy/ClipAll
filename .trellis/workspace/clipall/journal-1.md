@@ -109,3 +109,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 6: 完成浮窗过滤与应用级取词设置
+
+**Date**: 2026-08-19
+**Task**: 完成浮窗过滤与应用级取词设置
+**Branch**: `main`
+
+### Summary
+
+完成全局与应用级自动显示策略、设置页收束和文字证据门禁；验证通过并使用稳定签名安装，用户验收后归档 08-13。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5798a1eef0d134b9e3a695fa915d2b93c9bbf30a` | (see git log) |
+
+### Status
+
+[OK] **Completed**
