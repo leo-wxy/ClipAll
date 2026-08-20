@@ -21,12 +21,12 @@
 
 ## Acceptance Criteria
 
-- [ ] AC1：原剪贴板包含上述 Qt 图片私有类型时，VSCode 双击或拖选真实文本能够进入剪贴板回退并显示浮窗，不再返回 `unsafePasteboard`。
-- [ ] AC2：兼容取词成功、超时和取消后，原剪贴板的显式 item、flavor、字节数据均完整恢复；第三方并发写入仍不被覆盖。
-- [ ] AC3：超过快照上限、原始 flavor 无法读取或恢复 API 失败时，在不覆盖用户剪贴板的前提下安静失败。
-- [ ] AC4：文件、图片及动态文件对象作为本次复制结果时继续被拒绝；AX 成功时仍不发送 `Command-C`。
-- [ ] AC5：自动验证覆盖至少一个 AppKit 无法表示、但 Pasteboard Manager 可完整往返的私有 flavor，并通过 `Scripts/verify-overlay-state.sh`、`Scripts/verify-all.sh` 与 `swift build --target ClipAll`。
-- [ ] AC6：当前构建通过 `Scripts/install-local-app.sh` 安装并启动 `/Applications/ClipAll.app`，由用户在 VSCode 与一个 AX 正常 App 中完成真实验收。
+- [x] AC1：原剪贴板包含上述 Qt 图片私有类型时，VSCode 双击或拖选真实文本能够进入剪贴板回退并显示浮窗，不再返回 `unsafePasteboard`。
+- [x] AC2：兼容取词成功、超时和取消后，原剪贴板的显式 item、flavor、字节数据均完整恢复；第三方并发写入仍不被覆盖。
+- [x] AC3：超过快照上限、原始 flavor 无法读取或恢复 API 失败时，在不覆盖用户剪贴板的前提下安静失败。
+- [x] AC4：文件、图片及动态文件对象作为本次复制结果时继续被拒绝；AX 成功时仍不发送 `Command-C`。
+- [x] AC5：自动验证覆盖至少一个 AppKit 无法表示、但 Pasteboard Manager 可完整往返的私有 flavor，并通过 `Scripts/verify-overlay-state.sh`、`Scripts/verify-all.sh` 与 `swift build --target ClipAll`。
+- [x] AC6：当前构建通过 `Scripts/install-local-app.sh` 安装并启动 `/Applications/ClipAll.app`，由用户在 VSCode 与一个 AX 正常 App 中完成真实验收。
 
 ## Out Of Scope
 
