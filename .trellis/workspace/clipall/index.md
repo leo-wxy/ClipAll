@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 6
-- **Last Active**: 2026-08-19
+- **Total Sessions**: 7
+- **Last Active**: 2026-08-20
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~132 | Active |
+| `journal-1.md` | ~154 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 7 | 2026-08-20 | 验收 Qt 私有剪贴板兼容取词 | `70c140a541ef857f3f81410127ece2264a1ed4e9`, `89d9293691716432ea10f3fa77d2fbb5181a46da` | `main` |
 | 6 | 2026-08-19 | 完成浮窗过滤与应用级取词设置 | `5798a1eef0d134b9e3a695fa915d2b93c9bbf30a` | `main` |
 | 5 | 2026-08-16 | 发布 ClipAll 0.0.11 UI 重设计 | `9cc80d7` | `main` |
 | 4 | 2026-08-11 | 应用入口可见性设置 | `b411990` | `main` |

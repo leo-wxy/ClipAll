@@ -130,3 +130,25 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 7: 验收 Qt 私有剪贴板兼容取词
+
+**Date**: 2026-08-20
+**Task**: 验收 Qt 私有剪贴板兼容取词
+**Branch**: `main`
+
+### Summary
+
+确认 VSCode 兼容取词可在 Qt 私有图片剪贴板存在时显示浮窗并无损恢复图片，AX 正常 App 与非文字对象过滤保持正确；归档 08-12。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `70c140a541ef857f3f81410127ece2264a1ed4e9` | (see git log) |
+| `89d9293691716432ea10f3fa77d2fbb5181a46da` | (see git log) |
+
+### Status
+
+[OK] **Completed**
