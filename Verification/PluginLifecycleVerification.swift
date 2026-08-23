@@ -176,6 +176,23 @@ enum PluginLifecycleVerification {
             "完整 pending 安装恢复后不应残留 staging"
         )
 
+        try await verifyInterruptedUninstallRecovery(
+            root: root.appendingPathComponent("InterruptedUninstall", isDirectory: true),
+            fixtureURL: fixtureURL,
+            sourcePackage: sourcePackage
+        )
+        try await verifyQuarantinedRecoveryRecords(
+            root: root.appendingPathComponent("RecoveryQuarantine", isDirectory: true),
+            fixtureURL: fixtureURL,
+            replacementFixtureURL: replacementFixtureURL
+        )
+        try await verifyDisabledBundledRepair(
+            root: root.appendingPathComponent("DisabledBundledRepair", isDirectory: true),
+            fixtureURL: fixtureURL,
+            replacementFixtureURL: replacementFixtureURL,
+            replacementSourcePackage: replacementSourcePackage
+        )
+
         // Leave an abandoned operation behind before the first store call. The
         // first-use directory setup must remove it without touching the fixture.
         let orphanDirectory = root
@@ -538,6 +555,321 @@ enum PluginLifecycleVerification {
         print("Plugin lifecycle verification passed")
     }
 
+    private static func verifyInterruptedUninstallRecovery(
+        root: URL,
+        fixtureURL: URL,
+        sourcePackage: ValidatedExternalPluginPackage
+    ) async throws {
+        let store = PluginInstallationStore(rootDirectory: root)
+        let prepared = try await store.prepareImport(from: fixtureURL)
+        let pending = try await store.commit(prepared, replacingExisting: false)
+        try await store.finalize(pending)
+
+        for moveReceipt in [true, false] {
+            let installedPackage = root
+                .appendingPathComponent("Installed", isDirectory: true)
+                .appendingPathComponent(
+                    "\(PluginID.timestampTools.rawValue).clipallplugin",
+                    isDirectory: true
+                )
+            let installedReceipt = root
+                .appendingPathComponent("Receipts", isDirectory: true)
+                .appendingPathComponent("\(PluginID.timestampTools.rawValue).json")
+            let operation = root
+                .appendingPathComponent(".Staging", isDirectory: true)
+                .appendingPathComponent("Uninstall-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(
+                at: operation,
+                withIntermediateDirectories: false
+            )
+            try writeUninstallRecovery(operation: operation, hadPreviousReceipt: true)
+            try FileManager.default.moveItem(
+                at: installedPackage,
+                to: operation.appendingPathComponent(
+                    installedPackage.lastPathComponent,
+                    isDirectory: true
+                )
+            )
+            if moveReceipt {
+                try FileManager.default.moveItem(
+                    at: installedReceipt,
+                    to: operation.appendingPathComponent("receipt.json")
+                )
+            }
+
+            let restarted = PluginInstallationStore(rootDirectory: root)
+            let recovered = try await restarted.validateInstalled(pluginID: .timestampTools)
+            try expect(
+                recovered.fingerprint == sourcePackage.fingerprint,
+                "卸载中断后必须恢复原 package 与 receipt"
+            )
+            let stagingEmpty = try stagingIsEmpty(root)
+            try expect(stagingEmpty, "卸载中断恢复后不应残留 staging")
+        }
+
+        let withoutReceiptRoot = root.appendingPathComponent(
+            "WithoutReceipt",
+            isDirectory: true
+        )
+        let withoutReceiptStore = PluginInstallationStore(rootDirectory: withoutReceiptRoot)
+        let withoutReceiptPrepared = try await withoutReceiptStore.prepareImport(from: fixtureURL)
+        let withoutReceiptPending = try await withoutReceiptStore.commit(
+            withoutReceiptPrepared,
+            replacingExisting: false
+        )
+        try await withoutReceiptStore.finalize(withoutReceiptPending)
+        let withoutReceiptPackage = withoutReceiptRoot
+            .appendingPathComponent("Installed", isDirectory: true)
+            .appendingPathComponent(
+                "\(PluginID.timestampTools.rawValue).clipallplugin",
+                isDirectory: true
+            )
+        let withoutReceiptURL = withoutReceiptRoot
+            .appendingPathComponent("Receipts", isDirectory: true)
+            .appendingPathComponent("\(PluginID.timestampTools.rawValue).json")
+        try FileManager.default.removeItem(at: withoutReceiptURL)
+        let withoutReceiptOperation = withoutReceiptRoot
+            .appendingPathComponent(".Staging", isDirectory: true)
+            .appendingPathComponent("Uninstall-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: withoutReceiptOperation,
+            withIntermediateDirectories: false
+        )
+        try writeUninstallRecovery(
+            operation: withoutReceiptOperation,
+            hadPreviousReceipt: false
+        )
+        try FileManager.default.moveItem(
+            at: withoutReceiptPackage,
+            to: withoutReceiptOperation.appendingPathComponent(
+                withoutReceiptPackage.lastPathComponent,
+                isDirectory: true
+            )
+        )
+
+        let restartedWithoutReceipt = PluginInstallationStore(rootDirectory: withoutReceiptRoot)
+        _ = try await restartedWithoutReceipt.loadInstalled()
+        let recoveredWithoutReceipt = try PluginPackageValidator().validate(
+            packageURL: withoutReceiptPackage,
+            source: .installed
+        )
+        try expect(
+            recoveredWithoutReceipt.fingerprint == sourcePackage.fingerprint,
+            "无 receipt 的卸载中断仍应恢复原 package"
+        )
+        try expect(
+            !FileManager.default.fileExists(atPath: withoutReceiptURL.path),
+            "恢复不得凭空生成原本不存在的 receipt"
+        )
+        let withoutReceiptStagingEmpty = try stagingIsEmpty(withoutReceiptRoot)
+        try expect(withoutReceiptStagingEmpty, "无 receipt 的卸载恢复后不应残留 staging")
+    }
+
+    private static func verifyQuarantinedRecoveryRecords(
+        root: URL,
+        fixtureURL: URL,
+        replacementFixtureURL: URL
+    ) async throws {
+        let malformedRoot = root.appendingPathComponent("Malformed", isDirectory: true)
+        let malformedStore = PluginInstallationStore(rootDirectory: malformedRoot)
+        let malformedInitial = try await malformedStore.prepareImport(from: fixtureURL)
+        let malformedInitialPending = try await malformedStore.commit(
+            malformedInitial,
+            replacingExisting: false
+        )
+        try await malformedStore.finalize(malformedInitialPending)
+        let malformedReplacement = try await malformedStore.prepareImport(
+            from: replacementFixtureURL
+        )
+        _ = try await malformedStore.commit(malformedReplacement, replacingExisting: true)
+        let malformedOperation = try onlyStagingOperation(malformedRoot)
+        try Data("{".utf8).write(
+            to: malformedOperation.appendingPathComponent("transaction.json"),
+            options: .atomic
+        )
+
+        let restartedAfterMalformed = PluginInstallationStore(rootDirectory: malformedRoot)
+        _ = try await restartedAfterMalformed.validateInstalled(pluginID: .timestampTools)
+        let malformedQuarantineCount = try quarantineEntries(malformedRoot).count
+        try expect(
+            malformedQuarantineCount == 1,
+            "损坏的恢复记录应被隔离"
+        )
+        let restartedAgain = PluginInstallationStore(rootDirectory: malformedRoot)
+        _ = try await restartedAgain.validateInstalled(pluginID: .timestampTools)
+
+        let traversalRoot = root.appendingPathComponent("Traversal", isDirectory: true)
+        let traversalStore = PluginInstallationStore(rootDirectory: traversalRoot)
+        let traversalInitial = try await traversalStore.prepareImport(from: fixtureURL)
+        let traversalInitialPending = try await traversalStore.commit(
+            traversalInitial,
+            replacingExisting: false
+        )
+        try await traversalStore.finalize(traversalInitialPending)
+        let traversalReplacement = try await traversalStore.prepareImport(
+            from: replacementFixtureURL
+        )
+        _ = try await traversalStore.commit(traversalReplacement, replacingExisting: true)
+        let traversalOperation = try onlyStagingOperation(traversalRoot)
+        let recoveryURL = traversalOperation.appendingPathComponent("transaction.json")
+        var recovery = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: recoveryURL)
+        ) as! [String: Any]
+        recovery["pluginID"] = "../Escape"
+        try JSONSerialization.data(
+            withJSONObject: recovery,
+            options: [.prettyPrinted, .sortedKeys]
+        ).write(to: recoveryURL, options: .atomic)
+
+        let sentinelPackage = traversalRoot.appendingPathComponent(
+            "Escape.clipallplugin",
+            isDirectory: true
+        )
+        let sentinelMarker = sentinelPackage.appendingPathComponent("sentinel")
+        let sentinelReceipt = traversalRoot.appendingPathComponent("Escape.json")
+        let sentinelPackageData = Data("package-sentinel".utf8)
+        let sentinelReceiptData = Data("receipt-sentinel".utf8)
+        try FileManager.default.createDirectory(
+            at: sentinelPackage,
+            withIntermediateDirectories: false
+        )
+        try sentinelPackageData.write(to: sentinelMarker)
+        try sentinelReceiptData.write(to: sentinelReceipt)
+
+        let restartedAfterTraversal = PluginInstallationStore(rootDirectory: traversalRoot)
+        _ = try await restartedAfterTraversal.validateInstalled(pluginID: .timestampTools)
+        let preservedPackageData = try Data(contentsOf: sentinelMarker)
+        let preservedReceiptData = try Data(contentsOf: sentinelReceipt)
+        let traversalQuarantineCount = try quarantineEntries(traversalRoot).count
+        try expect(
+            preservedPackageData == sentinelPackageData,
+            "越界恢复记录不得覆盖目录外 package"
+        )
+        try expect(
+            preservedReceiptData == sentinelReceiptData,
+            "越界恢复记录不得覆盖目录外 receipt"
+        )
+        try expect(
+            traversalQuarantineCount == 1,
+            "越界恢复记录应被隔离"
+        )
+
+        let symlinkRoot = root.appendingPathComponent("Symlink", isDirectory: true)
+        let symlinkStore = PluginInstallationStore(rootDirectory: symlinkRoot)
+        _ = try await symlinkStore.loadInstalled()
+        let externalOperation = root.appendingPathComponent(
+            "ExternalUninstallOperation",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: externalOperation,
+            withIntermediateDirectories: false
+        )
+        try writeUninstallRecovery(
+            operation: externalOperation,
+            hadPreviousReceipt: false
+        )
+        let externalPackage = externalOperation.appendingPathComponent(
+            "\(PluginID.timestampTools.rawValue).clipallplugin",
+            isDirectory: true
+        )
+        try FileManager.default.copyItem(at: fixtureURL, to: externalPackage)
+        let symlinkOperation = symlinkRoot
+            .appendingPathComponent(".Staging", isDirectory: true)
+            .appendingPathComponent("Uninstall-Symlink", isDirectory: true)
+        try FileManager.default.createSymbolicLink(
+            at: symlinkOperation,
+            withDestinationURL: externalOperation
+        )
+
+        let restartedAfterSymlink = PluginInstallationStore(rootDirectory: symlinkRoot)
+        _ = try await restartedAfterSymlink.loadInstalled()
+        let preservedExternalPackage = try PluginPackageValidator().validate(
+            packageURL: externalPackage,
+            source: .installed
+        )
+        try expect(
+            preservedExternalPackage.definition.descriptor.id == .timestampTools,
+            "恢复不得沿 staging 符号链接移动外部 package"
+        )
+        let symlinkQuarantineCount = try quarantineEntries(symlinkRoot).count
+        try expect(symlinkQuarantineCount == 1, "staging 符号链接应被隔离")
+    }
+
+    private static func verifyDisabledBundledRepair(
+        root: URL,
+        fixtureURL: URL,
+        replacementFixtureURL: URL,
+        replacementSourcePackage: ValidatedExternalPluginPackage
+    ) async throws {
+        let store = PluginInstallationStore(rootDirectory: root)
+        let prepared = try await store.prepareImport(from: fixtureURL)
+        let pending = try await store.commit(prepared, replacingExisting: false)
+        try await store.finalize(pending)
+
+        let installedManifest = root
+            .appendingPathComponent("Installed", isDirectory: true)
+            .appendingPathComponent(
+                "\(PluginID.timestampTools.rawValue).clipallplugin",
+                isDirectory: true
+            )
+            .appendingPathComponent("plugin.json")
+        var manifest = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: installedManifest)
+        ) as! [String: Any]
+        manifest["minimumClipAllVersion"] = "99.0.0"
+        try JSONSerialization.data(
+            withJSONObject: manifest,
+            options: [.prettyPrinted, .sortedKeys]
+        ).write(to: installedManifest, options: .atomic)
+
+        let suite = "ClipAll.DisabledBundledRepair.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            throw PluginLifecycleVerificationError.failed("无法创建自动修复测试 UserDefaults")
+        }
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = SettingsStore(defaults: defaults)
+        settings.setPlugin(.timestampTools, isEnabled: false)
+        let registry = CapabilityRegistry()
+        let lifecycle = PluginLifecycleController(
+            installationStore: store,
+            registry: registry,
+            settings: settings,
+            configurationStore: PluginConfigurationStore(defaults: defaults),
+            runnerClient: PluginRunnerClient(runnerURL: URL(fileURLWithPath: "/usr/bin/false")),
+            developmentStore: DevelopmentPluginStore(defaults: defaults),
+            deletePluginSecrets: { _ in }
+        )
+        await lifecycle.loadInstalled()
+        try expect(
+            lifecycle.invalidPlugins.contains { $0.issue.code == "incompatible_host" },
+            "过期内置插件应进入自动修复路径"
+        )
+        let repairedBundledPlugin = try await lifecycle.repairBundledPluginIfNeeded(
+            pluginID: .timestampTools,
+            from: replacementFixtureURL
+        )
+        try expect(
+            repairedBundledPlugin,
+            "内置插件应完成自动修复"
+        )
+        try expect(
+            lifecycle.plugin(id: .timestampTools)?.state == .disabled,
+            "自动修复必须保留用户停用状态"
+        )
+        try expect(registry.plugin(for: .timestampTools) == nil, "停用插件不得被自动激活")
+        try expect(!settings.isPluginEnabled(.timestampTools), "停用状态不得被改写")
+        try expect(
+            !SettingsStore(defaults: defaults).isPluginEnabled(.timestampTools),
+            "停用状态必须持久化"
+        )
+        let repaired = try await store.validateInstalled(pluginID: .timestampTools)
+        try expect(
+            repaired.fingerprint == replacementSourcePackage.fingerprint,
+            "自动修复应安装随 App 提供的新包"
+        )
+    }
+
     private static func stagingIsEmpty(_ root: URL) throws -> Bool {
         let staging = root.appendingPathComponent(".Staging", isDirectory: true)
         guard FileManager.default.fileExists(atPath: staging.path) else { return true }
@@ -570,6 +902,27 @@ enum PluginLifecycleVerification {
             withJSONObject: recovery,
             options: [.prettyPrinted, .sortedKeys]
         ).write(to: recoveryURL, options: [.atomic])
+    }
+
+    private static func writeUninstallRecovery(
+        operation: URL,
+        hadPreviousReceipt: Bool
+    ) throws {
+        try JSONSerialization.data(
+            withJSONObject: [
+                "pluginID": PluginID.timestampTools.rawValue,
+                "hadPreviousReceipt": hadPreviousReceipt,
+            ],
+            options: [.prettyPrinted, .sortedKeys]
+        ).write(to: operation.appendingPathComponent("uninstall.json"), options: .atomic)
+    }
+
+    private static func quarantineEntries(_ root: URL) throws -> [URL] {
+        try FileManager.default.contentsOfDirectory(
+            at: root.appendingPathComponent(".Staging", isDirectory: true),
+            includingPropertiesForKeys: nil,
+            options: []
+        ).filter { $0.lastPathComponent.hasPrefix(".Quarantine-") }
     }
 
     private static func makeReplacementFixture(from source: URL, to destination: URL) throws {

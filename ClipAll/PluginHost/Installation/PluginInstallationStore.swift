@@ -70,6 +70,11 @@ actor PluginInstallationStore {
         var phase: InstallationPhase
     }
 
+    private struct UninstallRecoveryRecord: Codable, Sendable {
+        let pluginID: PluginID
+        let hadPreviousReceipt: Bool
+    }
+
     private struct PendingInstallationRecord: Sendable {
         let operationDirectory: URL
         var recovery: InstallationRecoveryRecord
@@ -94,6 +99,8 @@ actor PluginInstallationStore {
     private var preparedURLs: [UUID: URL] = [:]
     private var pendingTransactions: [UUID: PendingInstallationRecord] = [:]
     private static let recoveryFileName = "transaction.json"
+    private static let uninstallRecoveryFileName = "uninstall.json"
+    private static let quarantinePrefix = ".Quarantine-"
 
     init(rootDirectory: URL, validator: PluginPackageValidator = PluginPackageValidator()) {
         self.rootDirectory = rootDirectory
@@ -125,7 +132,7 @@ actor PluginInstallationStore {
                 stagingURL: stagedURL,
                 package: package,
                 replacesExistingPlugin: FileManager.default.fileExists(
-                    atPath: installedURL(for: package.definition.descriptor.id).path
+                    atPath: try installedURL(for: package.definition.descriptor.id).path
                 )
             )
         } catch {
@@ -163,8 +170,8 @@ actor PluginInstallationStore {
             throw PluginInstallationError.unknownPreparation
         }
         let pluginID = staged.definition.descriptor.id
-        let destination = installedURL(for: pluginID)
-        let receipt = receiptURL(for: pluginID)
+        let destination = try installedURL(for: pluginID)
+        let receipt = try receiptURL(for: pluginID)
         let exists = FileManager.default.fileExists(atPath: destination.path)
         guard replacingExisting || !exists else {
             throw PluginInstallationError.pluginAlreadyInstalled(pluginID)
@@ -316,7 +323,7 @@ actor PluginInstallationStore {
 
     func validateInstalled(pluginID: PluginID) throws -> ValidatedExternalPluginPackage {
         try ensureDirectories()
-        let destination = installedURL(for: pluginID)
+        let destination = try installedURL(for: pluginID)
         guard FileManager.default.fileExists(atPath: destination.path) else {
             throw PluginInstallationError.pluginNotInstalled(pluginID)
         }
@@ -331,8 +338,8 @@ actor PluginInstallationStore {
 
     func uninstall(pluginID: PluginID) throws {
         try ensureDirectories()
-        let package = installedURL(for: pluginID)
-        let receipt = receiptURL(for: pluginID)
+        let package = try installedURL(for: pluginID)
+        let receipt = try receiptURL(for: pluginID)
         guard FileManager.default.fileExists(atPath: package.path) else {
             throw PluginInstallationError.pluginNotInstalled(pluginID)
         }
@@ -344,30 +351,43 @@ actor PluginInstallationStore {
         try FileManager.default.createDirectory(at: operationDirectory, withIntermediateDirectories: false)
         let stagedPackage = operationDirectory.appendingPathComponent(package.lastPathComponent, isDirectory: true)
         let stagedReceipt = operationDirectory.appendingPathComponent("receipt.json")
+        let uninstallRecovery = UninstallRecoveryRecord(
+            pluginID: pluginID,
+            hadPreviousReceipt: FileManager.default.fileExists(atPath: receipt.path)
+        )
         var movedPackage = false
         var movedReceipt = false
 
-        defer {
-            // Success removes this directory in the transaction body; on a
-            // failed uninstall this guarantees no half-completed operation is
-            // retained after the original files have been restored.
-            try? FileManager.default.removeItem(at: operationDirectory)
-        }
-
         do {
+            try writeUninstallRecoveryRecord(
+                uninstallRecovery,
+                operationDirectory: operationDirectory
+            )
             try FileManager.default.moveItem(at: package, to: stagedPackage)
             movedPackage = true
-            if FileManager.default.fileExists(atPath: receipt.path) {
+            if uninstallRecovery.hadPreviousReceipt {
                 try FileManager.default.moveItem(at: receipt, to: stagedReceipt)
                 movedReceipt = true
             }
             try FileManager.default.removeItem(at: operationDirectory)
         } catch {
-            if movedPackage, FileManager.default.fileExists(atPath: stagedPackage.path) {
-                try? FileManager.default.moveItem(at: stagedPackage, to: package)
+            var restoredOriginalFiles = true
+            if movedPackage {
+                do {
+                    try restoreMovedItem(from: stagedPackage, to: package)
+                } catch {
+                    restoredOriginalFiles = false
+                }
             }
-            if movedReceipt, FileManager.default.fileExists(atPath: stagedReceipt.path) {
-                try? FileManager.default.moveItem(at: stagedReceipt, to: receipt)
+            if movedReceipt {
+                do {
+                    try restoreMovedItem(from: stagedReceipt, to: receipt)
+                } catch {
+                    restoredOriginalFiles = false
+                }
+            }
+            if restoredOriginalFiles {
+                try? FileManager.default.removeItem(at: operationDirectory)
             }
             throw PluginInstallationError.transactionFailed
         }
@@ -379,6 +399,7 @@ actor PluginInstallationStore {
                 at: directory,
                 withIntermediateDirectories: true
             )
+            try validateManagedDirectory(directory)
         }
         try cleanupOrphanedStaging()
     }
@@ -398,35 +419,70 @@ actor PluginInstallationStore {
         }
 
         for entry in entries where !activeOperationPaths.contains(entry.standardizedFileURL.path) {
-            let recoveryURL = entry.appendingPathComponent(Self.recoveryFileName)
-            if FileManager.default.fileExists(atPath: recoveryURL.path) {
-                do {
+            if entry.lastPathComponent.hasPrefix(Self.quarantinePrefix) {
+                continue
+            }
+
+            do {
+                let operationDirectory = try validatedOperationDirectory(entry)
+                let recoveryURL = operationDirectory.appendingPathComponent(Self.recoveryFileName)
+                let uninstallRecoveryURL = operationDirectory.appendingPathComponent(
+                    Self.uninstallRecoveryFileName
+                )
+                let hasInstallationRecovery = FileManager.default.fileExists(
+                    atPath: recoveryURL.path
+                )
+                let hasUninstallRecovery = FileManager.default.fileExists(
+                    atPath: uninstallRecoveryURL.path
+                )
+
+                guard !(hasInstallationRecovery && hasUninstallRecovery) else {
+                    throw PluginInstallationError.transactionFailed
+                }
+
+                if hasInstallationRecovery {
                     let recovery = try JSONDecoder().decode(
                         InstallationRecoveryRecord.self,
                         from: Data(contentsOf: recoveryURL)
                     )
                     try recoverOrphanedInstallation(
                         recovery,
-                        operationDirectory: entry
+                        operationDirectory: operationDirectory
                     )
-                } catch {
+                } else if hasUninstallRecovery {
+                    let recovery = try JSONDecoder().decode(
+                        UninstallRecoveryRecord.self,
+                        from: Data(contentsOf: uninstallRecoveryURL)
+                    )
+                    try recoverOrphanedUninstall(
+                        recovery,
+                        operationDirectory: operationDirectory
+                    )
+                } else if operationDirectory.lastPathComponent.hasPrefix("Uninstall-") {
                     throw PluginInstallationError.transactionFailed
+                } else {
+                    try removeIfPresent(operationDirectory)
                 }
-            } else {
-                try removeIfPresent(entry)
+            } catch {
+                try quarantine(entry)
             }
         }
     }
 
-    private func installedURL(for pluginID: PluginID) -> URL {
-        installedDirectory.appendingPathComponent(
-            "\(pluginID.rawValue).clipallplugin",
+    private func installedURL(for pluginID: PluginID) throws -> URL {
+        try directChildURL(
+            in: installedDirectory,
+            named: "\(pluginID.rawValue).clipallplugin",
             isDirectory: true
         )
     }
 
-    private func receiptURL(for pluginID: PluginID) -> URL {
-        receiptsDirectory.appendingPathComponent("\(pluginID.rawValue).json")
+    private func receiptURL(for pluginID: PluginID) throws -> URL {
+        try directChildURL(
+            in: receiptsDirectory,
+            named: "\(pluginID.rawValue).json",
+            isDirectory: false
+        )
     }
 
     private func loadReceipt(pluginID: PluginID) throws -> PluginInstallationReceipt {
@@ -434,7 +490,7 @@ actor PluginInstallationStore {
         do {
             return try decoder.decode(
                 PluginInstallationReceipt.self,
-                from: Data(contentsOf: receiptURL(for: pluginID))
+                from: Data(contentsOf: try receiptURL(for: pluginID))
             )
         } catch {
             throw PluginInstallationError.receiptMismatch(pluginID)
@@ -453,9 +509,21 @@ actor PluginInstallationStore {
         )
     }
 
+    private func writeUninstallRecoveryRecord(
+        _ recovery: UninstallRecoveryRecord,
+        operationDirectory: URL
+    ) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(recovery).write(
+            to: operationDirectory.appendingPathComponent(Self.uninstallRecoveryFileName),
+            options: .atomic
+        )
+    }
+
     private func restorePreviousInstallation(_ record: PendingInstallationRecord) throws {
-        let destination = installedURL(for: record.recovery.pluginID)
-        let receipt = receiptURL(for: record.recovery.pluginID)
+        let destination = try installedURL(for: record.recovery.pluginID)
+        let receipt = try receiptURL(for: record.recovery.pluginID)
 
         if record.recovery.hadPreviousPackage {
             guard FileManager.default.fileExists(atPath: record.backupPackage.path) else {
@@ -482,6 +550,8 @@ actor PluginInstallationStore {
         _ recovery: InstallationRecoveryRecord,
         operationDirectory: URL
     ) throws {
+        _ = try installedURL(for: recovery.pluginID)
+        _ = try receiptURL(for: recovery.pluginID)
         let record = PendingInstallationRecord(
             operationDirectory: operationDirectory,
             recovery: recovery
@@ -504,14 +574,52 @@ actor PluginInstallationStore {
         try? removeIfPresent(operationDirectory)
     }
 
+    private func recoverOrphanedUninstall(
+        _ recovery: UninstallRecoveryRecord,
+        operationDirectory: URL
+    ) throws {
+        let destination = try installedURL(for: recovery.pluginID)
+        let receipt = try receiptURL(for: recovery.pluginID)
+        let stagedPackage = operationDirectory.appendingPathComponent(
+            destination.lastPathComponent,
+            isDirectory: true
+        )
+        let stagedReceipt = operationDirectory.appendingPathComponent("receipt.json")
+
+        try restoreMovedItem(from: stagedPackage, to: destination)
+        if recovery.hadPreviousReceipt {
+            try restoreMovedItem(from: stagedReceipt, to: receipt)
+        } else if FileManager.default.fileExists(atPath: stagedReceipt.path)
+                    || FileManager.default.fileExists(atPath: receipt.path) {
+            throw PluginInstallationError.transactionFailed
+        }
+
+        try removeIfPresent(operationDirectory)
+    }
+
+    private func restoreMovedItem(from staged: URL, to destination: URL) throws {
+        let stagedExists = FileManager.default.fileExists(atPath: staged.path)
+        let destinationExists = FileManager.default.fileExists(atPath: destination.path)
+        switch (stagedExists, destinationExists) {
+        case (true, false):
+            try FileManager.default.moveItem(at: staged, to: destination)
+        case (false, true):
+            break
+        default:
+            throw PluginInstallationError.transactionFailed
+        }
+    }
+
     private func isCompleteNewInstallation(_ recovery: InstallationRecoveryRecord) -> Bool {
-        guard let package = try? validator.validate(
-            packageURL: installedURL(for: recovery.pluginID),
+        guard let packageURL = try? installedURL(for: recovery.pluginID),
+              let receiptURL = try? receiptURL(for: recovery.pluginID),
+              let package = try? validator.validate(
+            packageURL: packageURL,
             source: .installed
         ),
         let receipt = try? JSONDecoder().decode(
             PluginInstallationReceipt.self,
-            from: Data(contentsOf: receiptURL(for: recovery.pluginID))
+            from: Data(contentsOf: receiptURL)
         ) else {
             return false
         }
@@ -528,6 +636,57 @@ actor PluginInstallationStore {
         receipt.pluginID == package.definition.descriptor.id
             && receipt.version == package.definition.descriptor.version
             && receipt.fingerprint == package.fingerprint
+    }
+
+    private func directChildURL(
+        in directory: URL,
+        named fileName: String,
+        isDirectory: Bool
+    ) throws -> URL {
+        let root = directory.standardizedFileURL
+        let candidate = directory
+            .appendingPathComponent(fileName, isDirectory: isDirectory)
+            .standardizedFileURL
+        let resolvedRoot = root.resolvingSymlinksInPath().standardizedFileURL
+        let resolvedParent = candidate
+            .deletingLastPathComponent()
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        guard candidate.deletingLastPathComponent().standardizedFileURL.path == root.path,
+              resolvedParent.path == resolvedRoot.path,
+              candidate.lastPathComponent == fileName else {
+            throw PluginInstallationError.transactionFailed
+        }
+        return candidate
+    }
+
+    private func validateManagedDirectory(_ directory: URL) throws {
+        let attributes = try FileManager.default.attributesOfItem(atPath: directory.path)
+        guard attributes[.type] as? FileAttributeType == .typeDirectory else {
+            throw PluginInstallationError.transactionFailed
+        }
+    }
+
+    private func validatedOperationDirectory(_ entry: URL) throws -> URL {
+        try validateManagedDirectory(entry)
+        let operationDirectory = try directChildURL(
+            in: stagingDirectory,
+            named: entry.lastPathComponent,
+            isDirectory: true
+        )
+        guard operationDirectory.standardizedFileURL.path == entry.standardizedFileURL.path else {
+            throw PluginInstallationError.transactionFailed
+        }
+        return operationDirectory
+    }
+
+    private func quarantine(_ entry: URL) throws {
+        let destination = try directChildURL(
+            in: stagingDirectory,
+            named: "\(Self.quarantinePrefix)\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.moveItem(at: entry, to: destination)
     }
 
     private func removeIfPresent(_ url: URL) throws {

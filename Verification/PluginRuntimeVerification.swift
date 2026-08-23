@@ -85,6 +85,7 @@ enum PluginRuntimeVerification {
 
         try verifyRuntimeV2(runnerURL: runnerURL, pluginID: manifest.id)
         try verifyBoundedLogs(runnerURL: runnerURL, pluginID: manifest.id)
+        try verifyResponseBudget(runnerURL: runnerURL, pluginID: manifest.id)
 
         print("Plugin runtime verification passed (\(fixtures.count) fixtures)")
     }
@@ -288,6 +289,95 @@ enum PluginRuntimeVerification {
         )
     }
 
+    private static func verifyResponseBudget(runnerURL: URL, pluginID: String) throws {
+        let pressuredScript = #"""
+        var ClipAllPlugin = {
+          verify: function (_) {
+            var payload = Array(20501).join("x");
+            var items = [];
+            for (var index = 0; index < 12; index += 1) {
+              console.log("entry-" + index, payload);
+              items.push({
+                id: "item" + index,
+                label: "Item",
+                value: payload,
+                annotation: null,
+                style: "body"
+              });
+            }
+            for (var logIndex = 12; logIndex < 100; logIndex += 1) {
+              console.log("entry-" + logIndex, payload);
+            }
+            return { title: "Budget", subtitle: null, items: items };
+          }
+        };
+        """#
+        let pressured = try runWithData(
+            request(
+                script: pressuredScript,
+                pluginID: pluginID,
+                configuration: [:]
+            ),
+            runnerURL: runnerURL
+        )
+        try expect(pressured.response.status == .success, "响应预算压力下仍应成功")
+        try expect(
+            pressured.data.count <= PluginRuntimeLimits.maximumResponseBytes,
+            "真实 Runner stdout 响应不得超过完整 JSON 预算"
+        )
+        try expect(
+            !pressured.response.logs.isEmpty
+                && pressured.response.logs.count < PluginRuntimeLimits.maximumLogEntries,
+            "结果占用预算后应只裁剪尾部日志"
+        )
+        try expect(
+            pressured.response.logs.enumerated().allSatisfy { index, log in
+                log.hasPrefix("log: entry-\(index) ")
+                    && log.count <= PluginRuntimeLimits.maximumLogEntryCharacters
+            },
+            "预算裁剪必须保留日志顺序、level 与单条限制"
+        )
+
+        let oversizedWithoutLogsScript = #"""
+        var ClipAllPlugin = {
+          verify: function (_) {
+            var payload = Array(32769).join("x");
+            var items = [];
+            for (var index = 0; index < 12; index += 1) {
+              items.push({
+                id: "item" + index,
+                label: "Item",
+                value: payload,
+                annotation: null,
+                style: "body"
+              });
+            }
+            return { title: "Too Large", subtitle: null, items: items };
+          }
+        };
+        """#
+        let oversized = try runWithData(
+            request(
+                script: oversizedWithoutLogsScript,
+                pluginID: pluginID,
+                configuration: [:],
+                capturesLogs: false
+            ),
+            runnerURL: runnerURL
+        )
+        try expect(
+            oversized.data.count <= PluginRuntimeLimits.maximumResponseBytes,
+            "无日志结果超限时也必须返回受预算保护的响应"
+        )
+        try expect(
+            oversized.response.status == .failure
+                && oversized.response.output == nil
+                && oversized.response.logs.isEmpty
+                && oversized.response.error?.code == "invalid_output",
+            "无日志结果仍超限时应返回 invalid_output"
+        )
+    }
+
     private static func environmentCountScript(pluginID: String) -> String {
         #"""
         var ClipAllPlugin = {
@@ -319,6 +409,20 @@ enum PluginRuntimeVerification {
         _ requestData: Data,
         runnerURL: URL
     ) throws -> PluginRuntimeResponse {
+        try runWithData(requestData, runnerURL: runnerURL).response
+    }
+
+    private static func runWithData(
+        _ request: PluginRuntimeRequest,
+        runnerURL: URL
+    ) throws -> (response: PluginRuntimeResponse, data: Data) {
+        try runWithData(try JSONEncoder().encode(request), runnerURL: runnerURL)
+    }
+
+    private static func runWithData(
+        _ requestData: Data,
+        runnerURL: URL
+    ) throws -> (response: PluginRuntimeResponse, data: Data) {
         let process = Process()
         let input = Pipe()
         let output = Pipe()
@@ -336,7 +440,10 @@ enum PluginRuntimeVerification {
         guard process.terminationStatus == 0 else {
             throw PluginVerificationError.failed("runner 异常退出：\(process.terminationStatus)")
         }
-        return try JSONDecoder().decode(PluginRuntimeResponse.self, from: data)
+        return (
+            try JSONDecoder().decode(PluginRuntimeResponse.self, from: data),
+            data
+        )
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {

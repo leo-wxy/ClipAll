@@ -179,7 +179,8 @@ final class PluginLifecycleController: ObservableObject {
         )
         let pluginID = prepared.package.definition.descriptor.id
         let previous = plugins.first(where: { $0.id == pluginID })
-        let shouldEnable = previous.map { $0.state == .enabled } ?? true
+        let shouldEnable = previous.map { $0.state == .enabled }
+            ?? settings.isPluginEnabled(pluginID)
         let previousConfigurationValues = configurationStore.values[pluginID]
         let previousCapabilityIDs = Set(
             previous?.package.definition.capabilities.map(\.descriptor.id) ?? []

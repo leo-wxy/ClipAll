@@ -49,7 +49,7 @@ struct JavaScriptPluginRuntime {
         let sourceURL = URL(fileURLWithPath: "/virtual/(sanitizedSourceName(request.sourceName))")
         context.evaluateScript(request.script, withSourceURL: sourceURL)
         if let exception = takeException(&capturedException) {
-            return .failure(
+            return failureResponse(
                 errorPayload(from: exception, includesDetails: request.capturesLogs),
                 logs: logs(from: context, enabled: request.capturesLogs)
             )
@@ -61,7 +61,7 @@ struct JavaScriptPluginRuntime {
               let handler = plugin.objectForKeyedSubscript(request.handler),
               !handler.isUndefined,
               handler.isObject else {
-            return .failure(
+            return failureResponse(
                 .init(code: "missing_handler", message: "插件没有声明对应的执行函数"),
                 logs: logs(from: context, enabled: request.capturesLogs)
             )
@@ -69,7 +69,7 @@ struct JavaScriptPluginRuntime {
 
         let value = handler.call(withArguments: [request.input.text])
         if let exception = takeException(&capturedException) {
-            return .failure(
+            return failureResponse(
                 errorPayload(from: exception, includesDetails: request.capturesLogs),
                 logs: logs(from: context, enabled: request.capturesLogs)
             )
@@ -80,17 +80,23 @@ struct JavaScriptPluginRuntime {
               let data = try? JSONSerialization.data(withJSONObject: object),
               data.count <= PluginRuntimeLimits.maximumResponseBytes,
               let output = try? JSONDecoder().decode(PluginRuntimeResult.self, from: data) else {
-            return .failure(
+            return failureResponse(
                 .init(code: "invalid_output", message: "插件返回了无效结果"),
                 logs: logs(from: context, enabled: request.capturesLogs)
             )
         }
 
         if let validationError = validate(output) {
-            return .failure(validationError, logs: logs(from: context, enabled: request.capturesLogs))
+            return failureResponse(
+                validationError,
+                logs: logs(from: context, enabled: request.capturesLogs)
+            )
         }
 
-        return .success(output, logs: logs(from: context, enabled: request.capturesLogs))
+        return successResponse(
+            output,
+            logs: logs(from: context, enabled: request.capturesLogs)
+        )
     }
 
     private func makeJSONObject<T: Encodable>(_ value: T) -> Any? {
@@ -132,6 +138,41 @@ struct JavaScriptPluginRuntime {
         }
         return rawLogs.prefix(PluginRuntimeLimits.maximumLogEntries).map {
             clipped($0, maximum: PluginRuntimeLimits.maximumLogEntryCharacters)
+        }
+    }
+
+    private func successResponse(
+        _ output: PluginRuntimeResult,
+        logs: [String]
+    ) -> PluginRuntimeResponse {
+        fittingResponse(logs: logs) { .success(output, logs: $0) }
+            ?? .failure(.init(code: "invalid_output", message: "插件返回结果超过运行上限"))
+    }
+
+    private func failureResponse(
+        _ error: PluginRuntimeErrorPayload,
+        logs: [String]
+    ) -> PluginRuntimeResponse {
+        fittingResponse(logs: logs) { .failure(error, logs: $0) }
+            ?? .failure(error)
+    }
+
+    private func fittingResponse(
+        logs: [String],
+        makeResponse: ([String]) -> PluginRuntimeResponse
+    ) -> PluginRuntimeResponse? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        var keptLogs = logs
+
+        while true {
+            let response = makeResponse(keptLogs)
+            if let data = try? encoder.encode(response),
+               data.count <= PluginRuntimeLimits.maximumResponseBytes {
+                return response
+            }
+            guard !keptLogs.isEmpty else { return nil }
+            keptLogs.removeLast()
         }
     }
 

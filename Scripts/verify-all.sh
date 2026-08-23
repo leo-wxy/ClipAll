@@ -34,6 +34,20 @@ for check in "${checks[@]}"; do
   "$PROJECT_ROOT/Scripts/$check"
 done
 
+print "==> verify-app-build"
+MODULE_CACHE="$PROJECT_ROOT/.swift-module-cache"
+mkdir -p "$MODULE_CACHE"
+env \
+  CLANG_MODULE_CACHE_PATH="$MODULE_CACHE" \
+  SWIFTPM_MODULECACHE_OVERRIDE="$MODULE_CACHE" \
+  swift build \
+    --package-path "$PROJECT_ROOT" \
+    --scratch-path "$PROJECT_ROOT/.build" \
+    --disable-sandbox \
+    --build-system native \
+    --configuration debug \
+    --product ClipAll
+
 print "==> verify-plugin.sh"
 "$PROJECT_ROOT/Scripts/verify-plugin.sh" "$PLUGIN_PATH"
 
