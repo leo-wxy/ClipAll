@@ -173,3 +173,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 9: 插件运行与生命周期可靠性修复
+
+**Date**: 2026-08-23
+**Task**: 插件运行与生命周期可靠性修复
+**Branch**: `main`
+
+### Summary
+
+修复卸载中断恢复、恢复路径边界、Runner 完整响应预算和内置插件禁用状态，并补齐全量构建与回归验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5f39abf` | (see git log) |
+
+### Status
+
+[OK] **Completed**
