@@ -5,6 +5,9 @@ set -euo pipefail
 PROJECT_ROOT="${0:A:h:h}"
 PLUGIN_PATH="${1:-$PROJECT_ROOT/Plugins/Examples/TimestampTools.clipallplugin}"
 
+print "==> verify-shell-syntax"
+/bin/zsh -n "$PROJECT_ROOT"/Scripts/*.sh
+
 print "==> verify-product-structure"
 if /usr/bin/grep -REn 'CapabilityCenter|capability-center|能力中心' \
   "$PROJECT_ROOT/ClipAll" \

@@ -261,8 +261,7 @@ final class SettingsStore: ObservableObject {
     }
 
     func removeSelectionApplication(_ bundleIdentifier: String) {
-        let normalized = bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return }
+        guard let normalized = Self.normalizedBundleIdentifier(bundleIdentifier) else { return }
         selectionAutomaticDisplayPolicies.removeValue(forKey: normalized)
         setSelectionFallbackExcluded(normalized, isExcluded: false)
     }
@@ -378,9 +377,7 @@ final class SettingsStore: ObservableObject {
     ) -> [String: SelectionAutomaticDisplayPolicy] {
         var sanitized: [String: SelectionAutomaticDisplayPolicy] = [:]
         for (bundleIdentifier, rawPolicy) in stored {
-            let normalized = bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !normalized.isEmpty,
-                  normalized != Bundle.main.bundleIdentifier,
+            guard let normalized = normalizedBundleIdentifier(bundleIdentifier),
                   let policy = SelectionAutomaticDisplayPolicy(rawValue: rawPolicy) else {
                 continue
             }

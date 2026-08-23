@@ -18,9 +18,7 @@ final class AppEnvironment: ObservableObject {
     let pluginLifecycle: PluginLifecycleController
     let runnerClient: PluginRunnerClient
     let bundledTimestampToolsURL: URL?
-    let selectionCapture: SelectionCaptureService
     let selectionMonitor: SelectionMonitor
-    let overlayStore: SelectionOverlayStore
     let overlayCoordinator: SelectionOverlayCoordinator
 
     @Published private(set) var startupIssue: String?
@@ -114,9 +112,7 @@ final class AppEnvironment: ObservableObject {
                 overlayCoordinator?.dismiss()
             }
         )
-        self.overlayStore = overlayStore
         self.overlayCoordinator = overlayCoordinator
-        self.selectionCapture = selectionCapture
         self.selectionMonitor = selectionMonitor
 
         settings.$isMonitoringEnabled

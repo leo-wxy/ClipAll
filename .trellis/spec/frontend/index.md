@@ -15,10 +15,10 @@ This directory contains guidelines for frontend development. Fill in each file w
 | Guide | Description | Status |
 |-------|-------------|--------|
 | [Directory Structure](./directory-structure.md) | Module organization and file layout | To fill |
-| [Component Guidelines](./component-guidelines.md) | Component patterns, props, composition | To fill |
+| [Component Guidelines](./component-guidelines.md) | Native SwiftUI component, window, state, and accessibility patterns | Active |
 | [Hook Guidelines](./hook-guidelines.md) | Custom hooks, data fetching patterns | To fill |
 | [State Management](./state-management.md) | Local state, global state, server state | To fill |
-| [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | To fill |
+| [Quality Guidelines](./quality-guidelines.md) | Overlay geometry, capture behavior, and required verification | Active |
 | [Type Safety](./type-safety.md) | Type patterns, validation | To fill |
 | [UI Design System](./ui-design-system.md) | Approved light/dark visual contract for all user-facing SwiftUI | Approved |
 

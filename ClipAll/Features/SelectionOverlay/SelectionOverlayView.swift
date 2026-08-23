@@ -60,7 +60,7 @@ struct SelectionOverlayView: View {
 
     private var actionBar: some View {
         HStack(spacing: 0) {
-            actionButton(
+            OverlayActionButton(
                 title: "复制",
                 symbolName: "doc.on.doc",
                 isLoading: false,
@@ -69,7 +69,7 @@ struct SelectionOverlayView: View {
                 action: store.copySelection
             )
 
-            actionButton(
+            OverlayActionButton(
                 title: "粘贴",
                 symbolName: "doc.on.clipboard",
                 isLoading: false,
@@ -79,7 +79,7 @@ struct SelectionOverlayView: View {
             )
 
             ForEach(store.fixedCapabilities) { capability in
-                actionButton(
+                OverlayActionButton(
                     title: capability.name,
                     symbolName: capability.symbolName,
                     isLoading: isExecuting(capability.id),
@@ -337,24 +337,6 @@ struct SelectionOverlayView: View {
             }
         }
         .padding(9)
-    }
-
-    private func actionButton(
-        title: String,
-        symbolName: String,
-        isLoading: Bool,
-        isActive: Bool,
-        isCapability: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        OverlayActionButton(
-            title: title,
-            symbolName: symbolName,
-            isLoading: isLoading,
-            isActive: isActive,
-            isCapability: isCapability,
-            action: action
-        )
     }
 
     private func statusRow(

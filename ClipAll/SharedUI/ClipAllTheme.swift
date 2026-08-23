@@ -74,10 +74,6 @@ enum ClipAllTheme {
     static let success = Color(nsColor: .systemGreen)
     static let warning = Color(nsColor: .systemOrange)
     static let error = Color(nsColor: .systemRed)
-    static let shadowElevated = adaptive(
-        light: NSColor.black.withAlphaComponent(0.07),
-        dark: NSColor.black.withAlphaComponent(0.28)
-    )
     static let shadowFloating = adaptive(
         light: NSColor.black.withAlphaComponent(0.18),
         dark: NSColor.black.withAlphaComponent(0.54)
@@ -95,13 +91,10 @@ enum ClipAllTheme {
     enum Radius {
         static let control: CGFloat = 8
         static let row: CGFloat = 10
-        static let surface: CGFloat = 16
         static let overlayChrome: CGFloat = 8
     }
 
     enum Shadow {
-        static let elevatedRadius: CGFloat = 14
-        static let elevatedY: CGFloat = 6
         static let floatingRadius: CGFloat = 14
         static let floatingY: CGFloat = 6
     }
@@ -191,27 +184,6 @@ struct ClipAllSettingsPage<Content: View>: View {
     }
 }
 
-private struct ClipAllSurfaceModifier: ViewModifier {
-    let cornerRadius: CGFloat
-
-    func body(content: Content) -> some View {
-        content
-            .background(
-                ClipAllTheme.elevatedSurface,
-                in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(ClipAllTheme.border, lineWidth: 1)
-            }
-            .shadow(
-                color: ClipAllTheme.shadowElevated,
-                radius: ClipAllTheme.Shadow.elevatedRadius,
-                y: ClipAllTheme.Shadow.elevatedY
-            )
-    }
-}
-
 private struct ClipAllInsetModifier: ViewModifier {
     let cornerRadius: CGFloat
 
@@ -229,10 +201,6 @@ private struct ClipAllInsetModifier: ViewModifier {
 }
 
 extension View {
-    func clipAllSurface(cornerRadius: CGFloat = ClipAllTheme.Radius.surface) -> some View {
-        modifier(ClipAllSurfaceModifier(cornerRadius: cornerRadius))
-    }
-
     func clipAllInset(cornerRadius: CGFloat = ClipAllTheme.Radius.row) -> some View {
         modifier(ClipAllInsetModifier(cornerRadius: cornerRadius))
     }

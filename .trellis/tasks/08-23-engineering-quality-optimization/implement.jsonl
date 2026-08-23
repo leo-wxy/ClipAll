@@ -1,0 +1,5 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "约束最小改动、验证和隐私边界"}
+{"file": ".trellis/spec/backend/local-build-and-release.md", "reason": "对齐本地构建、脚本与 CI 门禁"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "约束 SwiftUI 组件与状态职责"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "约束浮窗 UI 行为与验证"}

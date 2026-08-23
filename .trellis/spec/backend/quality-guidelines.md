@@ -328,6 +328,11 @@ SelectionMonitor.capturePointerSelection(
   - file/image/dynamic-object clipboard payloads remain rejected and snapshots
     retain their existing restoration and concurrency behavior.
 - `Scripts/verify-all.sh` and `swift build --target ClipAll` must pass.
+- If a restricted agent sandbox makes the real `PasteboardCreate` fixture fail
+  before its assertions run, rerun the unchanged verification script outside
+  that sandbox. Treat it as a product regression only when the unrestricted run
+  also fails; never skip the private-flavor assertions or patch capture code to
+  accommodate the sandbox.
 - Before commit, install through `Scripts/install-local-app.sh` and manually
   verify one AX-invisible text App, one Chromium editor, one IDE file tree / Tab,
   and one input field.

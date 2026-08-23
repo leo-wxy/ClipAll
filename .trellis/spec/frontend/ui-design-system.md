@@ -144,8 +144,7 @@ the same role appears in three or more surfaces.
   neutral material or a quiet border. Destructive actions use semantic red only.
 - Prefer inline rows and separators for settings. Reserve a card for a truly
   independent object, focused task, empty state, or floating result.
-- Never nest `clipAllSurface()` inside another `clipAllSurface()` merely to
-  create hierarchy.
+- Never nest elevated cards merely to create hierarchy.
 - Form fields align with their labels and share a common control height. Avoid
   unrelated hard-coded widths for each field type.
 - Icon badges use one coherent geometry derived from the App icon. Do not put
@@ -217,7 +216,7 @@ Expected semantic token families:
 - `canvas`, `sidebar`, `contentSurface`, `elevatedSurface`;
 - `textPrimary`, `textSecondary`, `separator`, `border`;
 - `accent`, `accentSoft`, `selectionFill`, `focusRing`, `spark`;
-- `shadowFloating`, `shadowElevated`;
+- `shadowFloating`;
 - `Typography`, `Spacing`, `Radius`, and `Size` namespaces.
 
 Shared components own hover, pressed, selected, focus, disabled, and appearance

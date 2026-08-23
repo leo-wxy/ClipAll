@@ -43,7 +43,6 @@ ClipAllIconBadge(
 )
 ```
 
-- `clipAllSurface()` is for top-level cards.
 - `clipAllInset()` is for nested fields and result blocks.
 - `ClipAllHoverRow` gives non-selectable rows a pointer affordance.
 - `ClipAllSelectableRowStyle` combines hover, pressed, selected fill, and a

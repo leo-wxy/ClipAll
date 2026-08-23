@@ -33,15 +33,10 @@ App 第一次取词需要“系统设置 → 隐私与安全性 → 辅助功能
 
 ```sh
 ./Scripts/check-version.sh
-./Scripts/verify-core.sh
-./Scripts/verify-plugin.sh Plugins/Examples/TimestampTools.clipallplugin
-./Scripts/verify-lifecycle.sh Plugins/Examples/TimestampTools.clipallplugin
-./Scripts/verify-runner-client.sh
-./Scripts/verify-overlay-state.sh
-./Scripts/verify-openai-translation.sh
+./Scripts/verify-all.sh
 ```
 
-这些检查分别覆盖内容特征与路由、时间工具 fixtures、插件安装生命周期、Runner 超时/取消/协议故障、浮层定位与设置持久化，以及 OpenAI-compatible 翻译请求与错误处理。
+`verify-all.sh` 先检查全部 `Scripts/*.sh` 的 zsh 语法，再覆盖内容特征与路由、浮层状态、翻译、Runner、插件运行时和安装生命周期。
 
 ## 手动主流程
 

@@ -18,7 +18,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Database Guidelines](./database-guidelines.md) | ORM patterns, queries, migrations | To fill |
 | [Error Handling](./error-handling.md) | Error types, handling strategies | To fill |
 | [Quality Guidelines](./quality-guidelines.md) | Sensitive process I/O and cross-App selection fallback contracts | Active |
-| [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | To fill |
+| [Logging Guidelines](./logging-guidelines.md) | OSLog levels, structural metadata, sensitive-data exclusions | Active |
 | [Local Build And Release](./local-build-and-release.md) | Version, signing, Applications-only install, CI/CD | Active |
 
 ---
