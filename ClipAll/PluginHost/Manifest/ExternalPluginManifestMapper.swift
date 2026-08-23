@@ -32,7 +32,7 @@ struct SemanticVersion: Comparable, Equatable, Sendable {
 struct ExternalPluginManifestMapper: Sendable {
     let hostVersion: SemanticVersion
 
-    init(hostVersion: String = "0.0.11") {
+    init(hostVersion: String = "0.0.12") {
         guard let version = SemanticVersion(hostVersion) else {
             preconditionFailure("宿主版本必须是三段 SemVer")
         }
