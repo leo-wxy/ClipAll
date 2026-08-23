@@ -152,3 +152,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 8: 非插件质量优化收尾
+
+**Date**: 2026-08-23
+**Task**: 非插件质量优化收尾
+**Branch**: `main`
+
+### Summary
+
+精简非插件代码，收束日志与验证规范，并完成构建、安装和签名核验。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e050a1d` | (see git log) |
+
+### Status
+
+[OK] **Completed**
