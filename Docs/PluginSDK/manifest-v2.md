@@ -56,7 +56,8 @@ field ID 在插件内唯一。`visibleWhen` 只能引用同插件字段，且比
 |---|---|
 | `id` | 必须以 `<plugin-id>.` 开头 |
 | `name` / `symbolName` / `purpose` | UI 展示和检索信息 |
-| `examples` / `exclusions` | 用户说明与未来语义路由合同 |
+| `examples` | 用户说明与检索示例；最多 12 项，每项最多 240 字符 |
+| `exclusions` | 保留的排除说明；最多 12 项，每项最多 240 字符 |
 | `executionKind` | v2 固定为 `resultPanel` |
 | `handler` | `ClipAllPlugin` 全局对象上的函数名 |
 | `routingRules` | 内容类型、分数和可解释理由 |
@@ -66,6 +67,9 @@ field ID 在插件内唯一。`visibleWhen` 只能引用同插件字段，且比
 
 每条 routing rule 的 `score` 范围为 0…100。推荐仍由宿主阈值和用户固定项决定，
 插件不能要求自动执行。
+
+`exclusions` 当前只在导入时做格式与大小校验，不参与 UI、推荐、路由或 Runtime。
+需要排除输入时，handler 仍须自行严格校验并返回明确错误。
 
 ### 声明式输入匹配
 
@@ -95,5 +99,5 @@ field ID 在插件内唯一。`visibleWhen` 只能引用同插件字段，且比
 
 - `plugin.json` ≤ 256 KB，入口脚本 ≤ 1 MB，整个包 ≤ 5 MB；
 - 最多 256 个普通文件；拒绝符号链接和逃逸包根目录的路径；
-- runtime entry 必须是相对 `.js` 路径，解析后仍位于包根目录；
+- runtime entry 必须是至少 4 字符、大小写敏感的相对 `.js` 路径，解析后仍位于包根目录；
 - capability、configuration 和 option ID 均不得重复。

@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Implement against the existing Runtime v2, Runner limits, plugin configuration and lifecycle contracts."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Keep manifest schema, Mapper, domain types, Runner and verification synchronized across boundaries."}
+{"file":".trellis/tasks/08-14-plugin-runtime-config-api/research/runtime-contract.md","reason":"Preserve the established v2 process and JavaScript API boundary while hardening reliability."}
+{"file":".trellis/tasks/08-14-plugin-runtime-config-api/research/config-lifecycle.md","reason":"Reuse the existing configuration and lifecycle ownership decisions without adding a second service."}

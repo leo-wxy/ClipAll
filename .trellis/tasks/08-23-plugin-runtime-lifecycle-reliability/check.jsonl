@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Verify Runner memory bounds, v2 contract stability and lifecycle failure semantics."}
+{"file":".trellis/spec/backend/local-build-and-release.md","reason":"Run the full verification, stable signing and Applications-only installation gate."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Confirm plugin settings and lifecycle UI retain the existing SwiftUI interaction contract."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Check full App build and installed-App regression expectations."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Audit schema, Mapper, transaction, Runtime and docs as one cross-layer contract."}

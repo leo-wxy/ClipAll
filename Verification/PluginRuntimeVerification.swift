@@ -84,6 +84,7 @@ enum PluginRuntimeVerification {
         }
 
         try verifyRuntimeV2(runnerURL: runnerURL, pluginID: manifest.id)
+        try verifyBoundedLogs(runnerURL: runnerURL, pluginID: manifest.id)
 
         print("Plugin runtime verification passed (\(fixtures.count) fixtures)")
     }
@@ -195,7 +196,8 @@ enum PluginRuntimeVerification {
         script: String,
         pluginID: String,
         text: String = "test",
-        configuration: [String: PluginRuntimeConfigurationValue]
+        configuration: [String: PluginRuntimeConfigurationValue],
+        capturesLogs: Bool = true
     ) -> PluginRuntimeRequest {
         PluginRuntimeRequest(
             script: script,
@@ -206,7 +208,83 @@ enum PluginRuntimeVerification {
                 text: text,
                 configuration: configuration
             ),
-            capturesLogs: true
+            capturesLogs: capturesLogs
+        )
+    }
+
+    private static func verifyBoundedLogs(runnerURL: URL, pluginID: String) throws {
+        let script = #"""
+        var ClipAllPlugin = {
+          verify: function (text) {
+            var payload = Array(601).join("x");
+            var serializedValues = 0;
+            var loggedValue = {
+              toJSON: function () {
+                serializedValues += 1;
+                return payload;
+              }
+            };
+            for (var index = 0; index < 1000; index += 1) {
+              if (index % 3 === 0) console.log("entry-" + index, loggedValue);
+              else if (index % 3 === 1) console.warn("entry-" + index, loggedValue);
+              else console.error("entry-" + index, loggedValue);
+            }
+            return {
+              title: "Logs",
+              subtitle: null,
+              items: [{
+                id: "result",
+                label: "Result",
+                value: String(serializedValues),
+                annotation: null,
+                style: "body"
+              }]
+            };
+          }
+        };
+        """#
+        let captured = try run(
+            request(
+                script: script,
+                pluginID: pluginID,
+                configuration: [:]
+            ),
+            runnerURL: runnerURL
+        )
+        try expect(captured.status == .success, "大量日志不应影响插件执行")
+        try expect(
+            captured.logs.count == PluginRuntimeLimits.maximumLogEntries,
+            "Runner 只应保留前 \(PluginRuntimeLimits.maximumLogEntries) 条日志"
+        )
+        try expect(
+            captured.output?.items.first?.value
+                == String(PluginRuntimeLimits.maximumLogEntries),
+            "达到日志上限后不应继续序列化日志参数"
+        )
+        try expect(captured.logs[0].hasPrefix("log: entry-0 "), "首条日志顺序或 level 错误")
+        try expect(captured.logs[1].hasPrefix("warn: entry-1 "), "第二条日志顺序或 level 错误")
+        try expect(captured.logs[2].hasPrefix("error: entry-2 "), "第三条日志顺序或 level 错误")
+        try expect(
+            captured.logs.allSatisfy {
+                $0.count <= PluginRuntimeLimits.maximumLogEntryCharacters
+            },
+            "每条日志必须在写入时限制长度"
+        )
+
+        let disabled = try run(
+            request(
+                script: script,
+                pluginID: pluginID,
+                configuration: [:],
+                capturesLogs: false
+            ),
+            runnerURL: runnerURL
+        )
+        try expect(disabled.status == .success, "关闭日志捕获不应影响插件执行")
+        try expect(disabled.logs.isEmpty, "关闭日志捕获时不应保存日志")
+        try expect(
+            disabled.output?.items.first?.value == "0",
+            "关闭日志捕获时不应序列化日志参数"
         )
     }
 

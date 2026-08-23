@@ -35,7 +35,13 @@ struct JavaScriptPluginRuntime {
             return .failure(.init(code: "invalid_request", message: "无法准备插件输入"))
         }
 
-        installer.call(withArguments: [request.input.pluginID, configurationValue])
+        installer.call(withArguments: [
+            request.input.pluginID,
+            configurationValue,
+            request.capturesLogs,
+            PluginRuntimeLimits.maximumLogEntries,
+            PluginRuntimeLimits.maximumLogEntryCharacters,
+        ])
         if let exception = takeException(&capturedException) {
             return .failure(errorPayload(from: exception, includesDetails: request.capturesLogs))
         }
@@ -165,9 +171,10 @@ struct JavaScriptPluginRuntime {
     private static let bootstrapScript = #"""
     (function (global) {
       "use strict";
-      return function (pluginID, configuration) {
+      return function (pluginID, configuration, capturesLogs, maximumLogEntries, maximumLogEntryCharacters) {
         var logs = [];
         function append(level, values) {
+          if (!capturesLogs || logs.length >= maximumLogEntries) return;
           var text = Array.prototype.map.call(values, function (value) {
             try {
               return typeof value === "string" ? value : JSON.stringify(value);
@@ -175,7 +182,7 @@ struct JavaScriptPluginRuntime {
               return String(value);
             }
           }).join(" ");
-          logs.push(level + ": " + text);
+          logs.push((level + ": " + text).slice(0, maximumLogEntryCharacters));
         }
         function deepFreeze(value) {
           if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;

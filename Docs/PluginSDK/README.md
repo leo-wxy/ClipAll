@@ -33,7 +33,7 @@ var ClipAllPlugin = {
 
 ## 匹配与外显
 
-插件通过每个 capability 的 `purpose`、`examples`、`exclusions` 和 `routingRules` 描述自己适合处理的内容。日期能力可以额外在 routing rule 中声明受限的 `dateFormat` 输入匹配器。宿主先提取选中文字的内容特征并评估声明式匹配，再按规则计算分数：
+插件通过每个 capability 的 `purpose`、`examples` 和 `routingRules` 描述自己适合处理的内容。`exclusions` 当前是保留说明字段，只做导入校验，不参与 UI、推荐、路由或 Runtime。日期能力可以额外在 routing rule 中声明受限的 `dateFormat` 输入匹配器。宿主先提取选中文字的内容特征并评估声明式匹配，再按规则计算分数：
 
 - 固定能力由用户决定，常驻操作栏；
 - 推荐能力最多显示一个，必须由用户点击执行；

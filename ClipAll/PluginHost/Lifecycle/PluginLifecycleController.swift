@@ -177,37 +177,65 @@ final class PluginLifecycleController: ObservableObject {
             prepared.package,
             replacingPluginID: replacingExisting ? prepared.package.definition.descriptor.id : nil
         )
-        let installed = try await installationStore.commit(
-            prepared,
-            replacingExisting: replacingExisting
-        )
-        let pluginID = installed.definition.descriptor.id
+        let pluginID = prepared.package.definition.descriptor.id
         let previous = plugins.first(where: { $0.id == pluginID })
         let shouldEnable = previous.map { $0.state == .enabled } ?? true
+        let previousConfigurationValues = configurationStore.values[pluginID]
         let previousCapabilityIDs = Set(
             previous?.package.definition.capabilities.map(\.descriptor.id) ?? []
         )
+        let pending = try await installationStore.commit(
+            prepared,
+            replacingExisting: replacingExisting
+        )
+        let installed = pending.package
         let installedCapabilityIDs = Set(installed.definition.capabilities.map(\.descriptor.id))
 
-        if previous?.state == .enabled {
-            _ = registry.unregister(pluginID: pluginID)
-        }
-        configurationStore.register(installed.definition.descriptor)
-
-        if shouldEnable {
-            do {
-                try activate(installed)
-            } catch {
-                if let previous {
-                    configurationStore.register(previous.package.definition.descriptor)
-                    if previous.state == .enabled {
-                        try? activate(previous.package)
-                    }
-                } else {
-                    configurationStore.unregister(pluginID: pluginID)
-                }
-                throw error
+        var activatedNewPackage = false
+        do {
+            if previous?.state == .enabled {
+                _ = registry.unregister(pluginID: pluginID)
             }
+            configurationStore.register(installed.definition.descriptor)
+            if shouldEnable {
+                try activate(installed)
+                activatedNewPackage = true
+            }
+            try await installationStore.finalize(pending)
+        } catch {
+            let originalError = error
+            if activatedNewPackage {
+                _ = registry.unregister(pluginID: pluginID)
+            }
+
+            var restorationFailed = false
+            do {
+                try await installationStore.rollback(pending)
+            } catch {
+                restorationFailed = true
+            }
+
+            if let previous {
+                configurationStore.register(previous.package.definition.descriptor)
+                if previous.state == .enabled {
+                    do {
+                        try activate(previous.package)
+                    } catch {
+                        restorationFailed = true
+                    }
+                }
+            } else {
+                configurationStore.unregister(pluginID: pluginID)
+            }
+            configurationStore.restoreValues(
+                previousConfigurationValues,
+                pluginID: pluginID
+            )
+
+            if restorationFailed {
+                throw PluginInstallationError.transactionFailed
+            }
+            throw originalError
         }
 
         settings.removeCapabilityReferences(previousCapabilityIDs.subtracting(installedCapabilityIDs))

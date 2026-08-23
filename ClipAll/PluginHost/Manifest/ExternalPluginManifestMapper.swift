@@ -143,6 +143,9 @@ struct ExternalPluginManifestMapper: Sendable {
                 if let placeholder = field.placeholder {
                     try validateOptionalString(placeholder, maximum: 240, location: "\(path).placeholder")
                 }
+                if case let .string(value) = field.defaultValue {
+                    try validateOptionalString(value, maximum: 4_096, location: "\(path).defaultValue")
+                }
                 kind = .text(placeholder: field.placeholder)
             }
 
@@ -204,6 +207,27 @@ struct ExternalPluginManifestMapper: Sendable {
             try validateHandler(capability.handler, location: "\(path).handler")
             guard capability.executionKind == .resultPanel else {
                 throw issue("unsupported_execution", "外置插件 v2 只支持 resultPanel", "\(path).executionKind")
+            }
+
+            guard capability.examples.count <= 12 else {
+                throw issue("manifest_limit", "每个能力最多声明 12 个示例", "\(path).examples")
+            }
+            for (exampleIndex, example) in capability.examples.enumerated() {
+                try validateOptionalString(
+                    example,
+                    maximum: 240,
+                    location: "\(path).examples[\(exampleIndex)]"
+                )
+            }
+            guard capability.exclusions.count <= 12 else {
+                throw issue("manifest_limit", "每个能力最多声明 12 个排除示例", "\(path).exclusions")
+            }
+            for (exclusionIndex, exclusion) in capability.exclusions.enumerated() {
+                try validateOptionalString(
+                    exclusion,
+                    maximum: 240,
+                    location: "\(path).exclusions[\(exclusionIndex)]"
+                )
             }
 
             let supportedKinds = Set(capability.supportedContentKinds)
@@ -275,7 +299,7 @@ struct ExternalPluginManifestMapper: Sendable {
                     symbolName: capability.symbolName,
                     purpose: capability.purpose,
                     supportedContentKinds: supportedKinds,
-                    examples: Array(capability.examples.prefix(12)),
+                    examples: capability.examples,
                     routingRules: capability.routingRules
                 ),
                 handler: capability.handler
@@ -287,21 +311,21 @@ struct ExternalPluginManifestMapper: Sendable {
         guard value.range(
             of: #"^[A-Za-z][A-Za-z0-9-]*(\.[A-Za-z0-9][A-Za-z0-9-]*)+$"#,
             options: .regularExpression
-        ) != nil, value.count <= 160 else {
+        ) != nil, value.unicodeScalars.count <= 160 else {
             throw issue("invalid_identifier", "插件 ID 必须是反向域名格式", location)
         }
     }
 
     private func validateSimpleIdentifier(_ value: String, location: String) throws {
         guard value.range(of: #"^[A-Za-z][A-Za-z0-9._-]*$"#, options: .regularExpression) != nil,
-              value.count <= 160 else {
+              value.unicodeScalars.count <= 160 else {
             throw issue("invalid_identifier", "标识符格式无效", location)
         }
     }
 
     private func validateHandler(_ value: String, location: String) throws {
         guard value.range(of: #"^[A-Za-z_$][A-Za-z0-9_$]*$"#, options: .regularExpression) != nil,
-              value.count <= 80 else {
+              value.unicodeScalars.count <= 80 else {
             throw issue("invalid_identifier", "handler 名称无效", location)
         }
     }
@@ -312,28 +336,29 @@ struct ExternalPluginManifestMapper: Sendable {
               !value.contains("\\"),
               path == value,
               !path.split(separator: "/").contains(".."),
-              value.lowercased().hasSuffix(".js"),
-              value.count <= 240 else {
+              value.unicodeScalars.count >= 4,
+              value.hasSuffix(".js"),
+              value.unicodeScalars.count <= 240 else {
             throw issue("unsafe_path", "runtime entry 必须是包内规范化 JavaScript 相对路径", "$.runtime.entry")
         }
     }
 
     private func validateSymbol(_ value: String, location: String) throws {
         guard value.range(of: #"^[A-Za-z0-9.-]+$"#, options: .regularExpression) != nil,
-              value.count <= 100 else {
+              value.unicodeScalars.count <= 100 else {
             throw issue("invalid_symbol", "SF Symbol 名称格式无效", location)
         }
     }
 
     private func validateDisplayString(_ value: String, maximum: Int, location: String) throws {
         guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              value.count <= maximum else {
+              value.unicodeScalars.count <= maximum else {
             throw issue("manifest_limit", "文本不能为空且不能超过 \(maximum) 个字符", location)
         }
     }
 
     private func validateOptionalString(_ value: String, maximum: Int, location: String) throws {
-        guard value.count <= maximum else {
+        guard value.unicodeScalars.count <= maximum else {
             throw issue("manifest_limit", "文本不能超过 \(maximum) 个字符", location)
         }
     }

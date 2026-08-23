@@ -118,6 +118,18 @@ final class PluginConfigurationStore: ObservableObject {
         fieldsByPlugin.removeValue(forKey: pluginID)
     }
 
+    func restoreValues(
+        _ restoredValues: [String: PluginConfigurationValue]?,
+        pluginID: PluginID
+    ) {
+        if let restoredValues {
+            values[pluginID] = restoredValues
+        } else {
+            values.removeValue(forKey: pluginID)
+        }
+        persist()
+    }
+
     func removeData(pluginID: PluginID) {
         fieldsByPlugin.removeValue(forKey: pluginID)
         values.removeValue(forKey: pluginID)

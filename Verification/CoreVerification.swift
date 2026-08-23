@@ -22,6 +22,7 @@ enum CoreVerification {
         )
         try verifyExternalPlugin(package)
         try verifyManifestV1IsRejected(package.packageURL)
+        try verifyManifestMapperLimits(package.packageURL)
         try verifyTimestampRouting(package)
         try verifyMatcherCompatibility()
         try verifyDiscoveryBounds()
@@ -62,6 +63,132 @@ enum CoreVerification {
         } catch let issue as PluginValidationIssue {
             try expect(issue.code == "manifest_version", "manifest v1 应返回 manifest_version")
             try expect(issue.location == "$.manifestVersion", "manifest v1 应定位到 manifestVersion")
+        }
+    }
+
+    private static func verifyManifestMapperLimits(_ packageURL: URL) throws {
+        let manifestURL = packageURL.appendingPathComponent("plugin.json")
+        let base = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: manifestURL)
+        ) as! [String: Any]
+
+        var manifest = base
+        try updateFirstCapability(in: &manifest) {
+            $0["examples"] = Array(repeating: "example", count: 13)
+        }
+        try expectManifestIssue(
+            manifest,
+            code: "manifest_limit",
+            location: "$.capabilities[0].examples"
+        )
+
+        manifest = base
+        try updateFirstCapability(in: &manifest) {
+            $0["examples"] = [String(repeating: "x", count: 241)]
+        }
+        try expectManifestIssue(
+            manifest,
+            code: "manifest_limit",
+            location: "$.capabilities[0].examples[0]"
+        )
+
+        manifest = base
+        try updateFirstCapability(in: &manifest) {
+            $0["examples"] = [String(repeating: "e\u{301}", count: 121)]
+        }
+        try expectManifestIssue(
+            manifest,
+            code: "manifest_limit",
+            location: "$.capabilities[0].examples[0]"
+        )
+
+        manifest = base
+        try updateFirstCapability(in: &manifest) {
+            $0["exclusions"] = Array(repeating: "excluded", count: 13)
+        }
+        try expectManifestIssue(
+            manifest,
+            code: "manifest_limit",
+            location: "$.capabilities[0].exclusions"
+        )
+
+        manifest = base
+        try updateFirstCapability(in: &manifest) {
+            $0["exclusions"] = [String(repeating: "x", count: 241)]
+        }
+        try expectManifestIssue(
+            manifest,
+            code: "manifest_limit",
+            location: "$.capabilities[0].exclusions[0]"
+        )
+
+        manifest = base
+        var configuration = manifest["configuration"] as! [[String: Any]]
+        configuration[0]["type"] = "text"
+        configuration[0]["defaultValue"] = String(repeating: "x", count: 4_097)
+        configuration[0].removeValue(forKey: "options")
+        manifest["configuration"] = configuration
+        try expectManifestIssue(
+            manifest,
+            code: "manifest_limit",
+            location: "$.configuration[0].defaultValue"
+        )
+
+        for entry in ["MAIN.JS", ".js"] {
+            manifest = base
+            var runtime = manifest["runtime"] as! [String: Any]
+            runtime["entry"] = entry
+            manifest["runtime"] = runtime
+            try expectManifestIssue(
+                manifest,
+                code: "unsafe_path",
+                location: "$.runtime.entry"
+            )
+        }
+
+        manifest = base
+        let maximumExamples = (0..<12).map {
+            String(repeating: Character(String($0 % 10)), count: 240)
+        }
+        try updateFirstCapability(in: &manifest) {
+            $0["examples"] = maximumExamples
+        }
+        let decoded = try ExternalPluginManifestDecoder().decode(
+            JSONSerialization.data(withJSONObject: manifest)
+        )
+        let mapped = try ExternalPluginManifestMapper().map(decoded, source: .installed)
+        try expect(
+            mapped.capabilities[0].descriptor.examples == maximumExamples,
+            "合法 examples 不应被静默截断"
+        )
+    }
+
+    private static func updateFirstCapability(
+        in manifest: inout [String: Any],
+        _ update: (inout [String: Any]) -> Void
+    ) throws {
+        guard var capabilities = manifest["capabilities"] as? [[String: Any]],
+              !capabilities.isEmpty else {
+            throw VerificationError.failed("测试 manifest 缺少 capability")
+        }
+        update(&capabilities[0])
+        manifest["capabilities"] = capabilities
+    }
+
+    private static func expectManifestIssue(
+        _ manifest: [String: Any],
+        code: String,
+        location: String
+    ) throws {
+        let decoded = try ExternalPluginManifestDecoder().decode(
+            JSONSerialization.data(withJSONObject: manifest)
+        )
+        do {
+            _ = try ExternalPluginManifestMapper().map(decoded, source: .installed)
+            throw VerificationError.failed("manifest 应拒绝 \(location)")
+        } catch let issue as PluginValidationIssue {
+            try expect(issue.code == code, "\(location) 应返回 \(code)")
+            try expect(issue.location == location, "\(location) 应返回精确位置")
         }
     }
 
