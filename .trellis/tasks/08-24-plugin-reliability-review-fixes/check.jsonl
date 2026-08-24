@@ -1,0 +1,3 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"验证 Runner 与完整质量门合同"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核 Store、Lifecycle、测试链路一致性"}
+{"file":".trellis/tasks/archive/2026-08/08-23-plugin-runtime-lifecycle-reliability/prd.md","reason":"复核原可靠性验收边界"}

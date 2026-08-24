@@ -321,6 +321,17 @@ enum PluginRuntimeVerification {
             runnerURL: runnerURL
         )
         try expect(pressured.response.status == .success, "响应预算压力下仍应成功")
+        guard let output = pressured.response.output else {
+            throw PluginVerificationError.failed("响应预算不得丢失合法 output")
+        }
+        try expect(
+            output.title == "Budget"
+                && output.items.count == 12
+                && output.items.enumerated().allSatisfy { index, item in
+                    item.id == "item\(index)" && item.value.count == 20_500
+                },
+            "日志预算裁剪不得修改 output items"
+        )
         try expect(
             pressured.data.count <= PluginRuntimeLimits.maximumResponseBytes,
             "真实 Runner stdout 响应不得超过完整 JSON 预算"

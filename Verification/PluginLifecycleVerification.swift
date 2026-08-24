@@ -80,6 +80,10 @@ enum PluginLifecycleVerification {
         } catch let error as PluginInstallationError {
             try expect(error == .unknownTransaction, "重复 rollback 应返回 unknownTransaction")
         }
+        try await verifyDeferredFinalizeCleanup(
+            root: root.appendingPathComponent("DeferredFinalizeCleanup", isDirectory: true),
+            fixtureURL: fixtureURL
+        )
 
         let crashRecoveryRoot = root.appendingPathComponent(
             "CrashRecovery",
@@ -185,6 +189,10 @@ enum PluginLifecycleVerification {
             root: root.appendingPathComponent("RecoveryQuarantine", isDirectory: true),
             fixtureURL: fixtureURL,
             replacementFixtureURL: replacementFixtureURL
+        )
+        try await verifyReceiptSymlinkRejection(
+            root: root.appendingPathComponent("ReceiptSymlink", isDirectory: true),
+            fixtureURL: fixtureURL
         )
         try await verifyDisabledBundledRepair(
             root: root.appendingPathComponent("DisabledBundledRepair", isDirectory: true),
@@ -367,6 +375,16 @@ enum PluginLifecycleVerification {
         try expect(
             restoredAfterRollback.fingerprint == installed.fingerprint,
             "replacement rollback 应恢复旧 package 与 receipt"
+        )
+        try expect(
+            restoredAfterRollback.definition.descriptor.version
+                == installed.definition.descriptor.version,
+            "replacement rollback 应恢复旧 version"
+        )
+        let restoredReceipt = try Data(contentsOf: receiptURL)
+        try expect(
+            restoredReceipt == originalReceipt,
+            "replacement rollback 应原样恢复旧 receipt"
         )
         let replacementRollbackStagingEmpty = try stagingIsEmpty(root)
         try expect(
@@ -553,6 +571,46 @@ enum PluginLifecycleVerification {
         )
 
         print("Plugin lifecycle verification passed")
+    }
+
+    private static func verifyDeferredFinalizeCleanup(
+        root: URL,
+        fixtureURL: URL
+    ) async throws {
+        let store = PluginInstallationStore(rootDirectory: root)
+        let prepared = try await store.prepareImport(from: fixtureURL)
+        let pending = try await store.commit(prepared, replacingExisting: false)
+        let staging = root.appendingPathComponent(".Staging", isDirectory: true)
+
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o500],
+            ofItemAtPath: staging.path
+        )
+        do {
+            defer {
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: 0o700],
+                    ofItemAtPath: staging.path
+                )
+            }
+            try await store.finalize(pending)
+        }
+
+        let installedAfterCleanupRetry = try await store.validateInstalled(
+            pluginID: .timestampTools
+        )
+        try expect(
+            installedAfterCleanupRetry.fingerprint == pending.package.fingerprint,
+            "finalize 延迟清理不得回滚已激活的新包"
+        )
+        let stagingEmpty = try stagingIsEmpty(root)
+        try expect(stagingEmpty, "下一次 Store 操作应重试 finalize 残留清理")
+        do {
+            try await store.rollback(pending)
+            throw PluginLifecycleVerificationError.failed("finalize 后 token 必须已消费")
+        } catch let error as PluginInstallationError {
+            try expect(error == .unknownTransaction, "finalize 后 rollback 应返回 unknownTransaction")
+        }
     }
 
     private static func verifyInterruptedUninstallRecovery(
@@ -796,6 +854,51 @@ enum PluginLifecycleVerification {
         try expect(symlinkQuarantineCount == 1, "staging 符号链接应被隔离")
     }
 
+    private static func verifyReceiptSymlinkRejection(
+        root: URL,
+        fixtureURL: URL
+    ) async throws {
+        let store = PluginInstallationStore(rootDirectory: root)
+        let prepared = try await store.prepareImport(from: fixtureURL)
+        let pending = try await store.commit(prepared, replacingExisting: false)
+        try await store.finalize(pending)
+
+        let receipt = root
+            .appendingPathComponent("Receipts", isDirectory: true)
+            .appendingPathComponent("\(PluginID.timestampTools.rawValue).json")
+        let externalReceipt = root.appendingPathComponent("ExternalReceipt.json")
+        let originalReceipt = try Data(contentsOf: receipt)
+        try FileManager.default.moveItem(at: receipt, to: externalReceipt)
+
+        for (target, label) in [
+            (externalReceipt, "existing"),
+            (root.appendingPathComponent("MissingReceipt.json"), "dangling"),
+        ] {
+            try? FileManager.default.removeItem(at: receipt)
+            try FileManager.default.createSymbolicLink(
+                at: receipt,
+                withDestinationURL: target
+            )
+            do {
+                _ = try await store.validateInstalled(pluginID: .timestampTools)
+                throw PluginLifecycleVerificationError.failed(
+                    "\(label) receipt symlink 必须被拒绝"
+                )
+            } catch let error as PluginInstallationError {
+                try expect(
+                    error == .receiptMismatch(.timestampTools),
+                    "\(label) receipt symlink 应返回 receiptMismatch"
+                )
+            }
+        }
+
+        let preservedExternalReceipt = try Data(contentsOf: externalReceipt)
+        try expect(
+            preservedExternalReceipt == originalReceipt,
+            "receipt symlink 校验不得修改外部目标"
+        )
+    }
+
     private static func verifyDisabledBundledRepair(
         root: URL,
         fixtureURL: URL,
@@ -867,6 +970,11 @@ enum PluginLifecycleVerification {
         try expect(
             repaired.fingerprint == replacementSourcePackage.fingerprint,
             "自动修复应安装随 App 提供的新包"
+        )
+        let repairStagingEmpty = try stagingIsEmpty(root)
+        try expect(
+            repairStagingEmpty,
+            "停用插件自动修复 finalize 后不应残留 staging"
         )
     }
 

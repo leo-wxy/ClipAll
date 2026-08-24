@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"插件 Runner、配置与完整验证合同"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"共享路径校验优先在现有入口修复"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Store、Lifecycle 与 verification 边界核对"}
+{"file":".trellis/tasks/archive/2026-08/08-23-plugin-runtime-lifecycle-reliability/prd.md","reason":"继承原插件可靠性事务与验收合同"}

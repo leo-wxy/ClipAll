@@ -652,9 +652,11 @@ actor PluginInstallationStore {
             .deletingLastPathComponent()
             .resolvingSymlinksInPath()
             .standardizedFileURL
+        let candidateValues = try? candidate.resourceValues(forKeys: [.isSymbolicLinkKey])
         guard candidate.deletingLastPathComponent().standardizedFileURL.path == root.path,
               resolvedParent.path == resolvedRoot.path,
-              candidate.lastPathComponent == fileName else {
+              candidate.lastPathComponent == fileName,
+              candidateValues?.isSymbolicLink != true else {
             throw PluginInstallationError.transactionFailed
         }
         return candidate
@@ -690,7 +692,9 @@ actor PluginInstallationStore {
     }
 
     private func removeIfPresent(_ url: URL) throws {
-        if FileManager.default.fileExists(atPath: url.path) {
+        let values = try? url.resourceValues(forKeys: [.isSymbolicLinkKey])
+        if FileManager.default.fileExists(atPath: url.path)
+            || values?.isSymbolicLink == true {
             try FileManager.default.removeItem(at: url)
         }
     }
