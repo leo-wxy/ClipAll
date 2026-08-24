@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 9
-- **Last Active**: 2026-08-23
+- **Total Sessions**: 10
+- **Last Active**: 2026-08-24
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~196 | Active |
+| `journal-1.md` | ~217 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 10 | 2026-08-24 | 修复微信双击取词 | `96e64d3` | `main` |
 | 9 | 2026-08-23 | 插件运行与生命周期可靠性修复 | `5f39abf` | `main` |
 | 8 | 2026-08-23 | 非插件质量优化收尾 | `e050a1d` | `main` |
 | 7 | 2026-08-20 | 验收 Qt 私有剪贴板兼容取词 | `70c140a541ef857f3f81410127ece2264a1ed4e9`, `89d9293691716432ea10f3fa77d2fbb5181a46da` | `main` |

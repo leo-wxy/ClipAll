@@ -194,3 +194,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 10: 修复微信双击取词
+
+**Date**: 2026-08-24
+**Task**: 修复微信双击取词
+**Branch**: `main`
+
+### Summary
+
+基于实时日志以原生 I-beam 补足 AX 空路径的文字证据，保留图片严格门禁并完成微信验收。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `96e64d3` | (see git log) |
+
+### Status
+
+[OK] **Completed**
