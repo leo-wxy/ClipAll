@@ -141,6 +141,8 @@ if executor.executionPresentation == .external {
   global/per-App pointer-policy decision.
 - `SelectionCapturing.preflightFallbackPolicy(for:at:)` classifies the original
   second mouse-down target before a multi-click can replace it with new UI.
+- `SelectionHitClassifier.multiClickFallbackPolicy(in:hasTextSelectionCursor:)`
+  combines the original AX hit path with the system I-beam signal.
 - The async `SelectionCapturing.captureCurrentSelection(triggerLocation:fallbackPolicy:)`
   is the single capture entry used by pointer, registered hotkey, and menu commands.
 
@@ -173,9 +175,13 @@ if executor.executionPresentation == .external {
   the copied item must still pass the text-only clipboard checks. Multi-click
   starts as `textHitRequired`, then preflights the original second mouse-down
   path. A non-empty custom text path without hard roles/actions may use
-  `.compatiblePointer`; an image/control path or missing preflight evidence
-  remains strict. Capture must use the original mouse-up location rather than
-  the cursor's later position. `AXShowMenu` alone is not a blocker
+  `.compatiblePointer`. If the AX path is empty, only a current system cursor
+  whose image data and hot spot match `NSCursor.iBeam` is positive text evidence;
+  another or unavailable cursor remains strict. Never classify cursors with a
+  logged image hash, dimensions, a bundle whitelist, or one App's sampled values.
+  An explicit image/control path and a missing second-mouse-down preflight also
+  remain strict. Capture must use the original mouse-up location rather than the
+  cursor's later position. `AXShowMenu` alone is not a blocker
   because Electron text surfaces expose it together with real selection semantics.
   Shift-click is AX-only.
 - Clipboard fallback snapshots all readable pasteboard items before clearing,
@@ -209,8 +215,10 @@ if executor.executionPresentation == .external {
 | Drag copy produces a typed non-text object | Reject and restore; no overlay |
 | Double/triple click with AX text | Capture after mouse-up without fallback |
 | Double/triple click with an opaque custom-text preflight path | Try compatible copy using the original pointer location |
+| Double/triple click with an empty AX path and native I-beam | Try compatible copy; publish only validated non-empty text |
+| Double/triple click with an empty AX path and arrow/unavailable cursor | Keep `textHitRequired`; reject before `⌘C` |
 | Double/triple click whose original target is image/control | Keep `textHitRequired`; reject before `⌘C` |
-| Double/triple click with missing preflight evidence | Keep `textHitRequired`; reject before `⌘C` |
+| Double/triple click with no second-mouse-down preflight | Keep `textHitRequired`; reject before `⌘C` |
 | VSCode text path with selection attributes and `AXShowMenu` | Accept after the complete path has no hard control role |
 | Double/triple click on an IDE tab while editor text remains selected | Reject before `⌘C`; never publish stale editor text |
 | Double/triple click on a typed non-text object | Reject copied object; no overlay |
@@ -235,6 +243,8 @@ if executor.executionPresentation == .external {
   drag enters compatibility copy and publishes only validated text.
 - Good: Qt/QML custom text passes second-mouse-down preflight and may use
   compatible copy; an image target is rejected using its pre-open AX path.
+- Good: WeChat exposes an empty AX path for both text and images; native I-beam
+  permits the text attempt while the image's arrow cursor keeps it strict.
 - Base: TextEdit drag selection resolves standard selected text and range.
 - Good: double-clicking a Finder or IDE folder is rejected before copy when the
   hit path supplies no positive text-selection evidence.
@@ -252,7 +262,7 @@ if executor.executionPresentation == .external {
   success, equal-text detection, multi-type restore, timeout, cancellation,
   concurrent clipboard changes, compatible drag for empty/custom AX paths,
   second-mouse-down multi-click preflight propagation, safe missing-preflight
-  fallback, AX hit classification for
+  fallback, empty-path I-beam/arrow policy, AX hit classification for
   text/file-tree/tab/image/control targets, file-object
   rejection, native private-flavor restore, policy persistence, capture-before-
   policy rejection, source switching, explicit-capture bypass, fail-before-
@@ -282,6 +292,21 @@ NSEvent.addGlobalMonitorForEvents(
     // Preflight the original second mouse-down target before multi-click UI changes;
     // drag stays compatible and Shift-click stays AX-only.
 }
+```
+
+#### Wrong: Treat every empty AX path as non-text
+
+```swift
+if path.isEmpty { return .textHitRequired }
+```
+
+#### Correct: Require native I-beam evidence for an empty path
+
+```swift
+return SelectionHitClassifier.multiClickFallbackPolicy(
+    in: path,
+    hasTextSelectionCursor: matchesNativeIBeam(NSCursor.currentSystem)
+)
 ```
 
 ## Good / Base / Bad Cases

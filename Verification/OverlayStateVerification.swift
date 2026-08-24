@@ -831,6 +831,20 @@ enum OverlayStateVerification {
 
     private static func verifySelectionHitClassifier() throws {
         try expect(
+            SelectionHitClassifier.multiClickFallbackPolicy(
+                in: [],
+                hasTextSelectionCursor: true
+            ) == .compatiblePointer,
+            "AX 命中链为空但系统显示文字光标时，双击应进入内容校验回退"
+        )
+        try expect(
+            SelectionHitClassifier.multiClickFallbackPolicy(
+                in: [],
+                hasTextSelectionCursor: false
+            ) == .textHitRequired,
+            "AX 命中链为空且系统不是文字光标时，双击必须保持严格门禁"
+        )
+        try expect(
             !SelectionHitClassifier.allowsClipboardFallback(
                 in: [],
                 policy: .textHitRequired
@@ -965,6 +979,13 @@ enum OverlayStateVerification {
                 policy: .compatiblePointer
             ),
             "图片目标不得借拖选兼容策略发送复制快捷键"
+        )
+        try expect(
+            SelectionHitClassifier.multiClickFallbackPolicy(
+                in: imagePath,
+                hasTextSelectionCursor: true
+            ) == .textHitRequired,
+            "AX 已明确识别为图片时，即使光标异常也必须保持严格门禁"
         )
 
         let vscodeTreePath = [
