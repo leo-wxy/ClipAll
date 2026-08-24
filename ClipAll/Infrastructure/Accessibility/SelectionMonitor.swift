@@ -60,13 +60,18 @@ final class SelectionMonitor {
     }
 
     private enum CaptureTrigger {
-        case pointer(PointerSelectionIntent, sourceBundleIdentifier: String?)
+        case pointer(
+            PointerSelectionIntent,
+            sourceBundleIdentifier: String?,
+            triggerLocation: CGPoint,
+            fallbackPolicy: SelectionFallbackPolicy
+        )
         case hotKey
         case manual
 
         var name: String {
             switch self {
-            case let .pointer(intent, _):
+            case let .pointer(intent, _, _, _):
                 "pointer-\(intent.rawValue)"
             case .hotKey:
                 "hotKey"
@@ -77,10 +82,19 @@ final class SelectionMonitor {
 
         var fallbackPolicy: SelectionFallbackPolicy {
             switch self {
-            case let .pointer(intent, _):
-                intent.fallbackPolicy
+            case let .pointer(_, _, _, fallbackPolicy):
+                fallbackPolicy
             case .hotKey, .manual:
                 .enabled
+            }
+        }
+
+        var triggerLocation: CGPoint {
+            switch self {
+            case let .pointer(_, _, triggerLocation, _):
+                triggerLocation
+            case .hotKey, .manual:
+                NSEvent.mouseLocation
             }
         }
     }
@@ -95,6 +109,7 @@ final class SelectionMonitor {
     private var shortcut: GlobalShortcutConfiguration
     private var mouseMonitor: Any?
     private var pointerGesture = PointerSelectionGesture()
+    private var multiClickFallbackPolicy: SelectionFallbackPolicy?
     private var hotKeyRef: EventHotKeyRef?
     private var hotKeyHandlerRef: EventHandlerRef?
     private var captureTask: Task<Void, Never>?
@@ -134,7 +149,7 @@ final class SelectionMonitor {
                 switch event.type {
                 case .leftMouseDown:
                     Task { @MainActor [weak self] in
-                        self?.pointerGesture.begin(at: location)
+                        self?.handlePointerDown(at: location, clickCount: clickCount)
                     }
                 case .leftMouseDragged:
                     Task { @MainActor [weak self] in
@@ -168,6 +183,7 @@ final class SelectionMonitor {
         captureTask = nil
         lastSignature = nil
         pointerGesture.reset()
+        multiClickFallbackPolicy = nil
 
         if let mouseMonitor {
             NSEvent.removeMonitor(mouseMonitor)
@@ -207,12 +223,22 @@ final class SelectionMonitor {
         )
     }
 
-    private func handlePointerUp(
+    func handlePointerDown(at location: CGPoint, clickCount: Int) {
+        pointerGesture.begin(at: location)
+        multiClickFallbackPolicy = clickCount >= 2
+            ? captureService.preflightFallbackPolicy(for: .multiClick, at: location)
+            : nil
+    }
+
+    func handlePointerUp(
         at location: CGPoint,
         clickCount: Int,
-        isShiftPressed: Bool
+        isShiftPressed: Bool,
+        requiresRunning: Bool = true
     ) {
-        guard isRunning,
+        let preflightPolicy = multiClickFallbackPolicy
+        multiClickFallbackPolicy = nil
+        guard isRunning || !requiresRunning,
               let intent = pointerGesture.end(
                   at: location,
                   clickCount: clickCount,
@@ -220,13 +246,20 @@ final class SelectionMonitor {
               ) else { return }
         capturePointerSelection(
             intent,
-            sourceBundleIdentifier: frontmostBundleIdentifier()
+            sourceBundleIdentifier: frontmostBundleIdentifier(),
+            triggerLocation: location,
+            fallbackPolicy: intent == .multiClick
+                ? preflightPolicy ?? .textHitRequired
+                : intent.fallbackPolicy,
+            requiresRunning: requiresRunning
         )
     }
 
     func capturePointerSelection(
         _ intent: PointerSelectionIntent,
         sourceBundleIdentifier: String?,
+        triggerLocation: CGPoint = NSEvent.mouseLocation,
+        fallbackPolicy: SelectionFallbackPolicy? = nil,
         after delay: Duration = .milliseconds(45),
         requiresRunning: Bool = true
     ) {
@@ -235,7 +268,9 @@ final class SelectionMonitor {
         captureTask = nil
         let trigger = CaptureTrigger.pointer(
             intent,
-            sourceBundleIdentifier: sourceBundleIdentifier
+            sourceBundleIdentifier: sourceBundleIdentifier,
+            triggerLocation: triggerLocation,
+            fallbackPolicy: fallbackPolicy ?? intent.fallbackPolicy
         )
         guard validatePointerTrigger(trigger) else { return }
         scheduleCapture(
@@ -319,7 +354,7 @@ final class SelectionMonitor {
                     "Selection capture requested: trigger=\(trigger.name, privacy: .public), fallbackPolicy=\(trigger.fallbackPolicy.rawValue, privacy: .public)"
                 )
                 let context = try await captureService.captureCurrentSelection(
-                    triggerLocation: NSEvent.mouseLocation,
+                    triggerLocation: trigger.triggerLocation,
                     fallbackPolicy: trigger.fallbackPolicy
                 )
                 guard !Task.isCancelled, self.isRunning || !requiresRunning else { return }
@@ -348,7 +383,9 @@ final class SelectionMonitor {
         _ trigger: CaptureTrigger,
         context: SelectionContext? = nil
     ) -> Bool {
-        guard case let .pointer(intent, expectedBundleIdentifier) = trigger else { return true }
+        guard case let .pointer(intent, expectedBundleIdentifier, _, _) = trigger else {
+            return true
+        }
         let currentBundleIdentifier = frontmostBundleIdentifier()
         guard currentBundleIdentifier == expectedBundleIdentifier,
               context == nil

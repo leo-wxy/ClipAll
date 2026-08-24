@@ -21,6 +21,7 @@ enum OverlayStateVerification {
         try verifyPointerSelectionGesture()
         try verifySelectionAutomaticDisplayPolicies()
         try await verifySelectionMonitorPolicyGate()
+        try await verifySelectionMonitorMultiClickPreflight()
         try verifySelectionHitClassifier()
         try verifyEmptyPinnedPersistence()
         try verifyApplicationEntryVisibilityPersistence()
@@ -477,8 +478,8 @@ enum OverlayStateVerification {
             "达到阈值的拖选应触发取词"
         )
         try expect(
-            dragIntent?.fallbackPolicy == .textHitRequired,
-            "拖选应只在命中路径提供文字证据时允许复制回退"
+            dragIntent?.fallbackPolicy == .compatiblePointer,
+            "拖选应允许缺少 AX 文字语义的控件进入兼容复制回退"
         )
 
         gesture.begin(at: .zero)
@@ -541,7 +542,6 @@ enum OverlayStateVerification {
             settings.allowsAutomaticDisplay(for: .multiClick, bundleIdentifier: nil),
             "缺少 Bundle ID 时多击应跟随全局默认"
         )
-
         settings.isMultiClickSelectionEnabled = false
         try expect(
             !settings.allowsAutomaticDisplay(
@@ -690,7 +690,7 @@ enum OverlayStateVerification {
         try await waitUntil("允许的多击未触发捕获") { capture.callCount == 1 }
         try expect(
             capture.fallbackPolicies == [.textHitRequired],
-            "多击通过门禁后必须保留原 fallback policy"
+            "多击通过门禁后必须保留严格的文字命中策略"
         )
         try expect(selectionCount == 1, "允许的自动捕获应发布一次选区")
 
@@ -762,6 +762,59 @@ enum OverlayStateVerification {
         )
     }
 
+    private static func verifySelectionMonitorMultiClickPreflight() async throws {
+        let capture = VerificationSelectionCapture()
+        capture.sourceBundleIdentifier = "com.example.qt.opaque-text"
+        let monitor = SelectionMonitor(
+            captureService: capture,
+            shortcut: .standard,
+            frontmostBundleIdentifier: { capture.sourceBundleIdentifier },
+            onSelection: { _ in }
+        )
+
+        capture.preflightPolicy = .compatiblePointer
+        monitor.handlePointerDown(at: .zero, clickCount: 2)
+        monitor.handlePointerUp(
+            at: .zero,
+            clickCount: 2,
+            isShiftPressed: false,
+            requiresRunning: false
+        )
+        try await waitUntil("文字目标的双击预检未触发捕获") { capture.callCount == 1 }
+        try expect(
+            capture.fallbackPolicies == [.compatiblePointer],
+            "第二次按下命中文字候应沿用兼容回退"
+        )
+
+        capture.preflightPolicy = .textHitRequired
+        monitor.handlePointerDown(at: .zero, clickCount: 2)
+        monitor.handlePointerUp(
+            at: .zero,
+            clickCount: 2,
+            isShiftPressed: false,
+            requiresRunning: false
+        )
+        try await waitUntil("图片目标的双击预检未触发捕获") { capture.callCount == 2 }
+        try expect(
+            capture.fallbackPolicies.last == .textHitRequired,
+            "第二次按下命中图片时必须在复制前保持严格门禁"
+        )
+
+        monitor.handlePointerDown(at: .zero, clickCount: 1)
+        monitor.handlePointerUp(
+            at: .zero,
+            clickCount: 2,
+            isShiftPressed: false,
+            requiresRunning: false
+        )
+        try await waitUntil("缺失预检的双击未触发捕获") { capture.callCount == 3 }
+        try expect(
+            capture.fallbackPolicies.last == .textHitRequired,
+            "缺少第二次按下预检时必须安全回退到严格门禁"
+        )
+        try expect(capture.preflightCallCount == 2, "只应预检双击或多击的按下事件")
+    }
+
     private static func waitUntil(
         _ failureMessage: String,
         condition: @MainActor () -> Bool
@@ -783,6 +836,25 @@ enum OverlayStateVerification {
                 policy: .textHitRequired
             ),
             "自动指针取词的 AX 命中链为空时不得发送复制快捷键"
+        )
+        try expect(
+            SelectionHitClassifier.allowsClipboardFallback(
+                in: [],
+                policy: .compatiblePointer
+            ),
+            "明确拖选在 AX 命中链为空时应进入内容校验回退"
+        )
+
+        let customTextPath = [
+            SelectionHitEvidenceNode(role: "AXGroup", actions: [], attributes: []),
+            SelectionHitEvidenceNode(role: "AXWindow", actions: ["AXRaise"], attributes: []),
+        ]
+        try expect(
+            SelectionHitClassifier.allowsClipboardFallback(
+                in: customTextPath,
+                policy: .compatiblePointer
+            ),
+            "Qt/QML 自定义文字控件应通过拖选兼容门禁"
         )
 
         let codexTextPath = [
@@ -838,6 +910,13 @@ enum OverlayStateVerification {
             !SelectionHitClassifier.allowsClipboardFallback(in: ideFileTreePath),
             "带 Press/ShowMenu 动作的 IDE 文件树节点不得进入多击复制回退"
         )
+        try expect(
+            !SelectionHitClassifier.allowsClipboardFallback(
+                in: ideFileTreePath,
+                policy: .compatiblePointer
+            ),
+            "带 Press 动作的文件树节点不得进入拖选兼容回退"
+        )
 
         let ideTabPath = [
             SelectionHitEvidenceNode(
@@ -852,6 +931,22 @@ enum OverlayStateVerification {
             "无选区能力的 IDE Tab 不得复制焦点编辑器里的残留选区"
         )
 
+        let explicitTabPath = [
+            SelectionHitEvidenceNode(
+                role: "AXTabButton",
+                actions: ["AXPress"],
+                attributes: ["AXValue"]
+            ),
+            SelectionHitEvidenceNode(role: "AXTabGroup", actions: [], attributes: []),
+        ]
+        try expect(
+            !SelectionHitClassifier.allowsClipboardFallback(
+                in: explicitTabPath,
+                policy: .compatiblePointer
+            ),
+            "明确的 Tab 控件不得借拖选兼容策略进入复制回退"
+        )
+
         let imagePath = [
             SelectionHitEvidenceNode(
                 role: "AXImage",
@@ -863,6 +958,13 @@ enum OverlayStateVerification {
         try expect(
             !SelectionHitClassifier.allowsClipboardFallback(in: imagePath),
             "图片目标必须在发送复制快捷键前被拒绝"
+        )
+        try expect(
+            !SelectionHitClassifier.allowsClipboardFallback(
+                in: imagePath,
+                policy: .compatiblePointer
+            ),
+            "图片目标不得借拖选兼容策略发送复制快捷键"
         )
 
         let vscodeTreePath = [
@@ -895,6 +997,13 @@ enum OverlayStateVerification {
         try expect(
             !SelectionHitClassifier.allowsClipboardFallback(in: buttonInsideTextSurface),
             "文本容器内的可操作控件也不得借用祖先选区进入回退"
+        )
+        try expect(
+            !SelectionHitClassifier.allowsClipboardFallback(
+                in: buttonInsideTextSurface,
+                policy: .compatiblePointer
+            ),
+            "按钮不得借拖选兼容策略进入复制回退"
         )
     }
 
@@ -1066,8 +1175,18 @@ private final class VerificationBundleSource {
 private final class VerificationSelectionCapture: SelectionCapturing {
     private(set) var callCount = 0
     private(set) var fallbackPolicies: [SelectionFallbackPolicy] = []
+    private(set) var preflightCallCount = 0
+    var preflightPolicy = SelectionFallbackPolicy.textHitRequired
     var sourceBundleIdentifier: String?
     var selectionBounds: CGRect?
+
+    func preflightFallbackPolicy(
+        for intent: PointerSelectionIntent,
+        at triggerLocation: CGPoint
+    ) -> SelectionFallbackPolicy {
+        preflightCallCount += 1
+        return preflightPolicy
+    }
 
     func captureCurrentSelection(
         triggerLocation: CGPoint,

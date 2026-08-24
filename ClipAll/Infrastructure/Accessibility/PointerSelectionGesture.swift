@@ -3,6 +3,7 @@ import CoreGraphics
 enum SelectionFallbackPolicy: String, Equatable, Sendable {
     case disabled
     case textHitRequired
+    case compatiblePointer
     case enabled
 }
 
@@ -39,7 +40,9 @@ enum PointerSelectionIntent: String, Equatable, Sendable {
 
     var fallbackPolicy: SelectionFallbackPolicy {
         switch self {
-        case .drag, .multiClick:
+        case .drag:
+            .compatiblePointer
+        case .multiClick:
             .textHitRequired
         case .shiftClick:
             .disabled

@@ -134,11 +134,13 @@ if executor.executionPresentation == .external {
   four-point drag threshold.
 - `PointerSelectionGesture.end(at:clickCount:isShiftPressed:) -> PointerSelectionIntent?`
   returns `.drag`, `.multiClick`, `.shiftClick`, or `nil` and always resets state.
-- `PointerSelectionIntent.fallbackPolicy` maps `.drag` and `.multiClick` to
-  `.textHitRequired`, and `.shiftClick` to `.disabled`.
+- `PointerSelectionIntent.fallbackPolicy` maps `.drag` to `.compatiblePointer`,
+  `.multiClick` to `.textHitRequired`, and `.shiftClick` to `.disabled`.
 - `SelectionAutomaticDisplayPolicy` is `followGlobal`, `dragOnly`, or `disabled`.
 - `SettingsStore.allowsAutomaticDisplay(for:bundleIdentifier:)` is the single
   global/per-App pointer-policy decision.
+- `SelectionCapturing.preflightFallbackPolicy(for:at:)` classifies the original
+  second mouse-down target before a multi-click can replace it with new UI.
 - The async `SelectionCapturing.captureCurrentSelection(triggerLocation:fallbackPolicy:)`
   is the single capture entry used by pointer, registered hotkey, and menu commands.
 
@@ -165,12 +167,16 @@ if executor.executionPresentation == .external {
   chain for standard selected text/range and Text Marker selection.
 - If AX fails after pointer drag, registered hotkey, or menu capture,
   compatibility capture may send one targeted `⌘C` only when enabled and the
-  source bundle is not excluded. Automatic drag and multi-click require a
-  non-empty hit ancestry with selected-text or character-range semantics; the
-  complete bounded path is scanned before accepting that evidence. Hard
-  control roles/actions and paths ending at a window are rejected before
-  copying. `AXShowMenu` alone is not a blocker because Electron text surfaces
-  expose it together with real selection semantics.
+  source bundle is not excluded. A drag that crosses the movement threshold is
+  a compatible selection intent: it may continue without AX text semantics,
+  but known control roles/actions and images are rejected before copying, and
+  the copied item must still pass the text-only clipboard checks. Multi-click
+  starts as `textHitRequired`, then preflights the original second mouse-down
+  path. A non-empty custom text path without hard roles/actions may use
+  `.compatiblePointer`; an image/control path or missing preflight evidence
+  remains strict. Capture must use the original mouse-up location rather than
+  the cursor's later position. `AXShowMenu` alone is not a blocker
+  because Electron text surfaces expose it together with real selection semantics.
   Shift-click is AX-only.
 - Clipboard fallback snapshots all readable pasteboard items before clearing,
   waits asynchronously for a new change count, and restores only while it still
@@ -198,9 +204,13 @@ if executor.executionPresentation == .external {
 | Frontmost App changes after mouse-up | Invalidate before publishing any selection |
 | Drag below four points | No capture |
 | Drag at least four points | Capture after the short selection-settle delay |
-| Drag over an empty or known image/control target | Reject before `⌘C`; preserve the clipboard |
+| Drag over an AX-opaque custom text surface or empty hit path | Try compatibility copy; publish only validated text and restore the clipboard |
+| Drag over a known image/control target | Reject before `⌘C`; preserve the clipboard |
+| Drag copy produces a typed non-text object | Reject and restore; no overlay |
 | Double/triple click with AX text | Capture after mouse-up without fallback |
-| Double/triple click with no AX text evidence at the pointer | Reject before `⌘C`; keep explicit hotkey/menu fallback |
+| Double/triple click with an opaque custom-text preflight path | Try compatible copy using the original pointer location |
+| Double/triple click whose original target is image/control | Keep `textHitRequired`; reject before `⌘C` |
+| Double/triple click with missing preflight evidence | Keep `textHitRequired`; reject before `⌘C` |
 | VSCode text path with selection attributes and `AXShowMenu` | Accept after the complete path has no hard control role |
 | Double/triple click on an IDE tab while editor text remains selected | Reject before `⌘C`; never publish stale editor text |
 | Double/triple click on a typed non-text object | Reject copied object; no overlay |
@@ -221,6 +231,10 @@ if executor.executionPresentation == .external {
 
 - Good: a WebView exposes selection on an `AXGroup`; pointer hit-test plus
   ancestor traversal resolves it and presents the panel.
+- Good: Qt/QML custom text exposes no AX selection semantics; an explicit
+  drag enters compatibility copy and publishes only validated text.
+- Good: Qt/QML custom text passes second-mouse-down preflight and may use
+  compatible copy; an image target is rejected using its pre-open AX path.
 - Base: TextEdit drag selection resolves standard selected text and range.
 - Good: double-clicking a Finder or IDE folder is rejected before copy when the
   hit path supplies no positive text-selection evidence.
@@ -236,14 +250,18 @@ if executor.executionPresentation == .external {
 
 - `Scripts/verify-overlay-state.sh` asserts explicit gesture rules, fallback
   success, equal-text detection, multi-type restore, timeout, cancellation,
-  concurrent clipboard changes, AX hit classification for text/file-tree/tab,
-  file-object rejection, native private-flavor restore, policy persistence,
-  capture-before-policy rejection, source switching, explicit-capture bypass,
-  fail-before-clear snapshot limits, and Carbon hot-key ID isolation.
+  concurrent clipboard changes, compatible drag for empty/custom AX paths,
+  second-mouse-down multi-click preflight propagation, safe missing-preflight
+  fallback, AX hit classification for
+  text/file-tree/tab/image/control targets, file-object
+  rejection, native private-flavor restore, policy persistence, capture-before-
+  policy rejection, source switching, explicit-capture bypass, fail-before-
+  clear snapshot limits, and Carbon hot-key ID isolation.
 - `swift build --target ClipAll` verifies AppKit/Carbon integration compiles.
 - Manual QA must use `/Applications/ClipAll.app`: test TextEdit drag, double
   click, retained-highlight single click, normal typing, registered shortcut,
-  one `dragOnly` App, one `disabled` App, and at least one custom/WebView control.
+  one `dragOnly` App, one `disabled` App, and one AX-opaque App where text drag
+  and double-click work while double-clicking non-text content sends no copy.
 
 ### 7. Wrong vs Correct
 
@@ -261,8 +279,8 @@ NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { _ in
 NSEvent.addGlobalMonitorForEvents(
     matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
 ) { event in
-    // Feed a bounded gesture state machine. Drag may use filtered fallback;
-    // multi-click first requires text hit evidence; Shift-click remains AX-only.
+    // Preflight the original second mouse-down target before multi-click UI changes;
+    // drag stays compatible and Shift-click stays AX-only.
 }
 ```
 

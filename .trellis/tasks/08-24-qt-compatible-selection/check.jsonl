@@ -1,0 +1,2 @@
+{"file":".trellis/spec/frontend/index.md","reason":"核对前端质量检查入口"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"验证兼容拖选未破坏误触过滤与剪贴板安全契约"}

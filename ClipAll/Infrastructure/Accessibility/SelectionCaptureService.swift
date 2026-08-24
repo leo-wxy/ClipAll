@@ -31,6 +31,11 @@ enum SelectionCaptureError: Error, LocalizedError, Equatable, Sendable {
 
 @MainActor
 protocol SelectionCapturing: AnyObject {
+    func preflightFallbackPolicy(
+        for intent: PointerSelectionIntent,
+        at triggerLocation: CGPoint
+    ) -> SelectionFallbackPolicy
+
     func captureCurrentSelection(
         triggerLocation: CGPoint,
         fallbackPolicy: SelectionFallbackPolicy
@@ -55,6 +60,7 @@ enum SelectionHitClassifier {
         "AXCheckBox",
         "AXComboBox",
         "AXDisclosureTriangle",
+        "AXImage",
         "AXLink",
         "AXMenuButton",
         "AXMenuItem",
@@ -75,13 +81,17 @@ enum SelectionHitClassifier {
         in path: [SelectionHitEvidenceNode],
         policy: SelectionFallbackPolicy = .textHitRequired
     ) -> Bool {
+        let requiresTextHit: Bool
         switch policy {
         case .disabled:
             return false
         case .enabled:
             return true
+        case .compatiblePointer:
+            requiresTextHit = false
         case .textHitRequired:
             guard !path.isEmpty else { return false }
+            requiresTextHit = true
         }
 
         var foundTextSelectionSemantics = false
@@ -99,7 +109,7 @@ enum SelectionHitClassifier {
                 break
             }
         }
-        return foundTextSelectionSemantics
+        return !requiresTextHit || foundTextSelectionSemantics
     }
 }
 
@@ -127,6 +137,37 @@ final class SelectionCaptureService: SelectionCapturing {
         self.systemWideElement = systemWideElement
         self.clipboardFallback = clipboardFallback
         self.isFallbackAllowed = isFallbackAllowed
+    }
+
+    func preflightFallbackPolicy(
+        for intent: PointerSelectionIntent,
+        at triggerLocation: CGPoint
+    ) -> SelectionFallbackPolicy {
+        guard intent == .multiClick else { return intent.fallbackPolicy }
+        if let cursor = NSCursor.currentSystem {
+            Self.logger.notice(
+                "Pointer system cursor: imageHash=\(cursor.image.tiffRepresentation?.hashValue ?? 0, privacy: .public), size=\(String(describing: cursor.image.size), privacy: .public), hotSpot=\(String(describing: cursor.hotSpot), privacy: .public)"
+            )
+        } else {
+            Self.logger.notice("Pointer system cursor: unavailable")
+        }
+        let path = hitEvidencePath(at: triggerLocation)
+        guard !path.isEmpty else {
+            Self.logger.debug(
+                "Pointer fallback preflight: intent=multiClick, policy=textHitRequired, roles=none"
+            )
+            return .textHitRequired
+        }
+
+        let policy: SelectionFallbackPolicy = SelectionHitClassifier
+            .allowsClipboardFallback(in: path, policy: .compatiblePointer)
+            ? .compatiblePointer
+            : .textHitRequired
+        let roles = path.prefix(6).map(\.role).joined(separator: ",")
+        Self.logger.debug(
+            "Pointer fallback preflight: intent=multiClick, policy=\(policy.rawValue, privacy: .public), roles=\(roles, privacy: .public)"
+        )
+        return policy
     }
 
     func captureCurrentSelection(

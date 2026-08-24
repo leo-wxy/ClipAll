@@ -78,11 +78,11 @@ struct SelectionSettingsView: View {
     private var compatibilitySection: some View {
         ClipAllSettingsSection(
             "高级：兼容取词",
-            subtitle: "辅助功能无法读取时，临时模拟复制并在内存中恢复原剪贴板。"
+            subtitle: "文字目标无法读取时，临时模拟复制并恢复原剪贴板。"
         ) {
             settingToggleRow(
                 "启用复制回退",
-                subtitle: "仅在辅助功能读取失败时使用，不会永久改写剪贴板。",
+                subtitle: "拖选、双击和主动取词会先检查目标，图片等对象不会触发复制。",
                 symbol: "doc.on.clipboard",
                 isOn: $settings.isSelectionFallbackEnabled
             )

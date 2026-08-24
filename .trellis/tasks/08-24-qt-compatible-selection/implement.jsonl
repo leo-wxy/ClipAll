@@ -1,0 +1,2 @@
+{"file":".trellis/spec/frontend/index.md","reason":"确认浮窗与取词改动适用的前端规范入口"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"遵循跨 App 选择捕获、剪贴板恢复与浮窗验证契约"}
