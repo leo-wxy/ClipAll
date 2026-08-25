@@ -215,3 +215,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 11: 优化剪贴板回退分层策略
+
+**Date**: 2026-08-25
+**Task**: 优化剪贴板回退分层策略
+**Branch**: `main`
+
+### Summary
+
+按取词策略自动选择 20ms 单阶段或 120ms 多阶段剪贴板事务，保留微信/Qt 兼容并缩小严格路径等待；完成全量验证、稳定签名安装与真实应用验收。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8e4adc3` | (see git log) |
+
+### Status
+
+[OK] **Completed**
