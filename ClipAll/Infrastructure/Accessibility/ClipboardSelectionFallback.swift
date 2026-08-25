@@ -50,6 +50,7 @@ final class ClipboardSelectionFallback {
     private static let maximumItems = 16
     private static let maximumTypes = 64
     private static let maximumBytes = 32 * 1_024 * 1_024
+    private static let singleWriteStabilityDelay: Duration = .milliseconds(20)
     private static let pasteboardTagClass = UTTagClass(rawValue: "com.apple.nspboard-type")
     private static let nonTextObjectTypeIdentifiers: Set<String> = [
         NSPasteboard.PasteboardType.fileURL.rawValue,
@@ -117,7 +118,10 @@ final class ClipboardSelectionFallback {
         }
     }
 
-    func captureSelection(sourceProcessIdentifier: pid_t) async throws -> String {
+    func captureSelection(
+        sourceProcessIdentifier: pid_t,
+        acceptsStagedWrites: Bool
+    ) async throws -> String {
         guard isSourceFrontmost(sourceProcessIdentifier) else {
             throw ClipboardSelectionFallbackError.sourceUnavailable
         }
@@ -148,7 +152,8 @@ final class ClipboardSelectionFallback {
                     let settledChangeCount = try await settledCapturedChangeCount(
                         from: currentChangeCount,
                         before: deadline,
-                        sourceProcessIdentifier: sourceProcessIdentifier
+                        sourceProcessIdentifier: sourceProcessIdentifier,
+                        acceptsStagedWrites: acceptsStagedWrites
                     )
                     capturedChangeCount = settledChangeCount
 
@@ -213,13 +218,15 @@ final class ClipboardSelectionFallback {
     private func settledCapturedChangeCount(
         from initialChangeCount: Int,
         before deadline: ContinuousClock.Instant,
-        sourceProcessIdentifier: pid_t
+        sourceProcessIdentifier: pid_t,
+        acceptsStagedWrites: Bool
     ) async throws -> Int {
         let clock = ContinuousClock()
+        let delay = acceptsStagedWrites ? stabilityDelay : Self.singleWriteStabilityDelay
         var expectedChangeCount = initialChangeCount
 
         while clock.now < deadline {
-            try await Task.sleep(for: stabilityDelay)
+            try await Task.sleep(for: delay)
             try Task.checkCancellation()
             guard isSourceFrontmost(sourceProcessIdentifier) else {
                 throw ClipboardSelectionFallbackError.sourceUnavailable
@@ -231,6 +238,9 @@ final class ClipboardSelectionFallback {
             let currentChangeCount = pasteboard.changeCount
             if currentChangeCount == expectedChangeCount {
                 return currentChangeCount
+            }
+            guard acceptsStagedWrites else {
+                throw ClipboardSelectionFallbackError.clipboardChanged
             }
             expectedChangeCount = currentChangeCount
         }

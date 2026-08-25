@@ -23,6 +23,7 @@ enum OverlayStateVerification {
         try await verifySelectionMonitorPolicyGate()
         try await verifySelectionMonitorMultiClickPreflight()
         try verifySelectionHitClassifier()
+        try verifySelectionFallbackPolicyWriteModes()
         try verifyEmptyPinnedPersistence()
         try verifyApplicationEntryVisibilityPersistence()
         try await verifyClipboardSelectionFallback()
@@ -83,6 +84,10 @@ enum OverlayStateVerification {
         try await verifyClipboardScenario("私有类型恢复", verifyClipboardFallbackRestoresPrivateFlavor)
         try await verifyClipboardScenario("多格式恢复", verifyClipboardFallbackRestoresAllTypes)
         try await verifyClipboardScenario("相同文本", verifyClipboardFallbackDetectsSameTextCopy)
+        try await verifyClipboardScenario(
+            "单阶段二次写入",
+            verifyClipboardFallbackSingleWritePreservesSecondGeneration
+        )
         try await verifyClipboardScenario("超时恢复", verifyClipboardFallbackRestoresAfterTimeout)
         try await verifyClipboardScenario("并发写入", verifyClipboardFallbackPreservesExternalChange)
         try await verifyClipboardScenario("取消恢复", verifyClipboardFallbackRestoresAfterCancellation)
@@ -134,7 +139,10 @@ enum OverlayStateVerification {
             },
             isSourceFrontmost: { _ in true }
         )
-        let text = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+        let text = try await fallback.captureSelection(
+            sourceProcessIdentifier: 42,
+            acceptsStagedWrites: false
+        )
         try expect(text == "selected", "私有类型快照不应阻断本次取词")
 
         _ = PasteboardSynchronize(nativePasteboard)
@@ -178,7 +186,10 @@ enum OverlayStateVerification {
             writePasteboard(pasteboard, text: "selected")
             return true
         }
-        let text = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+        let text = try await fallback.captureSelection(
+            sourceProcessIdentifier: 42,
+            acceptsStagedWrites: false
+        )
 
         try expect(text == "selected", "复制回退应读取目标选区")
         try expect(pasteboard.string(forType: .string) == "original", "复制回退后应恢复原文字")
@@ -194,10 +205,45 @@ enum OverlayStateVerification {
             writePasteboard(pasteboard, text: "same")
             return true
         }
-        let text = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+        let text = try await fallback.captureSelection(
+            sourceProcessIdentifier: 42,
+            acceptsStagedWrites: false
+        )
 
         try expect(text == "same", "复制内容与原剪贴板相同时仍应依靠 changeCount 识别")
         try expect(pasteboard.string(forType: .string) == "same", "相同文字回退后仍应恢复剪贴板")
+    }
+
+    private static func verifyClipboardFallbackSingleWritePreservesSecondGeneration() async throws {
+        let pasteboard = VerificationPasteboard()
+        defer { pasteboard.clearContents() }
+        writePasteboard(pasteboard, text: "original")
+
+        var secondWriteTask: Task<Void, Never>?
+        let fallback = makeFallback(pasteboard: pasteboard) { _ in
+            writePasteboard(pasteboard, text: "selected")
+            secondWriteTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(2))
+                writePasteboard(pasteboard, text: "external")
+            }
+            return true
+        }
+
+        do {
+            _ = try await fallback.captureSelection(
+                sourceProcessIdentifier: 42,
+                acceptsStagedWrites: false
+            )
+            throw OverlayStateVerificationError.failed("单阶段复制遇到二次写入时应中止")
+        } catch let error as OverlayStateVerificationError {
+            throw error
+        } catch ClipboardSelectionFallbackError.clipboardChanged {
+            await secondWriteTask?.value
+            try expect(
+                pasteboard.string(forType: .string) == "external",
+                "单阶段复制不得覆盖首写后的新剪贴板内容"
+            )
+        }
     }
 
     private static func verifyClipboardFallbackRestoresAfterTimeout() async throws {
@@ -210,7 +256,10 @@ enum OverlayStateVerification {
             timeout: .milliseconds(25)
         ) { _ in true }
         do {
-            _ = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+            _ = try await fallback.captureSelection(
+                sourceProcessIdentifier: 42,
+                acceptsStagedWrites: false
+            )
             throw OverlayStateVerificationError.failed("复制无响应时应超时")
         } catch ClipboardSelectionFallbackError.timedOut {
             try expect(
@@ -235,7 +284,10 @@ enum OverlayStateVerification {
             writePasteboard(pasteboard, text: "external")
         }
         do {
-            _ = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+            _ = try await fallback.captureSelection(
+                sourceProcessIdentifier: 42,
+                acceptsStagedWrites: false
+            )
             throw OverlayStateVerificationError.failed("并发剪贴板变化应中止回退")
         } catch ClipboardSelectionFallbackError.clipboardChanged {
             try expect(
@@ -255,7 +307,10 @@ enum OverlayStateVerification {
             timeout: .seconds(1)
         ) { _ in true }
         let task = Task { @MainActor in
-            try await fallback.captureSelection(sourceProcessIdentifier: 42)
+            try await fallback.captureSelection(
+                sourceProcessIdentifier: 42,
+                acceptsStagedWrites: false
+            )
         }
         try await Task.sleep(for: .milliseconds(10))
         task.cancel()
@@ -286,7 +341,10 @@ enum OverlayStateVerification {
             throwIfReached("快照失败后不得发送复制")
         }
         do {
-            _ = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+            _ = try await fallback.captureSelection(
+                sourceProcessIdentifier: 42,
+                acceptsStagedWrites: false
+            )
             throw OverlayStateVerificationError.failed("超出上限的剪贴板应拒绝回退")
         } catch ClipboardSelectionFallbackError.unsafePasteboard {
             try expect(
@@ -315,7 +373,10 @@ enum OverlayStateVerification {
         }
 
         do {
-            let text = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+            let text = try await fallback.captureSelection(
+                sourceProcessIdentifier: 42,
+                acceptsStagedWrites: false
+            )
             throw OverlayStateVerificationError.failed(
                 "文件对象的纯文本表示不得触发浮窗，实际返回：\(text)"
             )
@@ -344,7 +405,10 @@ enum OverlayStateVerification {
         }
 
         do {
-            let text = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+            let text = try await fallback.captureSelection(
+                sourceProcessIdentifier: 42,
+                acceptsStagedWrites: false
+            )
             throw OverlayStateVerificationError.failed(
                 "图片对象的文字描述不得触发浮窗，实际返回：\(text)"
             )
@@ -396,7 +460,10 @@ enum OverlayStateVerification {
         }
 
         do {
-            _ = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+            _ = try await fallback.captureSelection(
+                sourceProcessIdentifier: 42,
+                acceptsStagedWrites: true
+            )
             throw OverlayStateVerificationError.failed("图片复制结果不得触发浮窗")
         } catch let error as OverlayStateVerificationError {
             throw error
@@ -434,7 +501,10 @@ enum OverlayStateVerification {
         }
 
         do {
-            let text = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+            let text = try await fallback.captureSelection(
+                sourceProcessIdentifier: 42,
+                acceptsStagedWrites: false
+            )
             throw OverlayStateVerificationError.failed(
                 "动态文件对象的纯文本表示不得触发浮窗，实际返回：\(text)"
             )
@@ -470,7 +540,10 @@ enum OverlayStateVerification {
             return true
         }
 
-        let text = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+        let text = try await fallback.captureSelection(
+            sourceProcessIdentifier: 42,
+            acceptsStagedWrites: true
+        )
         try expect(text == "selected text", "Chromium 真文字选区应继续支持复制回退")
         try expect(
             pasteboard.string(forType: .string) == "original",
@@ -573,6 +646,25 @@ enum OverlayStateVerification {
         try expect(
             gesture.end(at: CGPoint(x: 3, y: 1), clickCount: 1) == nil,
             "阈值内的轻微移动仍应视为普通单击"
+        )
+    }
+
+    private static func verifySelectionFallbackPolicyWriteModes() throws {
+        try expect(
+            !SelectionFallbackPolicy.disabled.acceptsStagedClipboardWrites,
+            "禁用回退不得接受分阶段剪贴板写入"
+        )
+        try expect(
+            !SelectionFallbackPolicy.textHitRequired.acceptsStagedClipboardWrites,
+            "严格文字命中应使用单阶段剪贴板事务"
+        )
+        try expect(
+            SelectionFallbackPolicy.compatiblePointer.acceptsStagedClipboardWrites,
+            "兼容指针取词应接受分阶段剪贴板写入"
+        )
+        try expect(
+            SelectionFallbackPolicy.enabled.acceptsStagedClipboardWrites,
+            "快捷键和菜单取词应接受分阶段剪贴板写入"
         )
     }
 

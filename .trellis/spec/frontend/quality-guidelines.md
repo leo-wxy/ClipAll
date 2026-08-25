@@ -144,9 +144,11 @@ if executor.executionPresentation == .external {
 - `SelectionHitClassifier.multiClickFallbackPolicy(in:)` classifies the original
   AX hit path; an empty path uses compatible copy because the result type is the
   only generic evidence available for AX-opaque apps.
-- `ClipboardSelectionFallback.captureSelection(sourceProcessIdentifier:)` waits
-  for one quiet interval after the latest post-copy change before classifying the
-  captured pasteboard generation.
+- `SelectionFallbackPolicy.acceptsStagedClipboardWrites` exhaustively maps
+  `.disabled` and `.textHitRequired` to `false`, and `.compatiblePointer` and
+  `.enabled` to `true`.
+- `ClipboardSelectionFallback.captureSelection(sourceProcessIdentifier:acceptsStagedWrites:)`
+  requires the caller to pass that result explicitly; it has no default mode.
 - The async `SelectionCapturing.captureCurrentSelection(triggerLocation:fallbackPolicy:)`
   is the single capture entry used by pointer, registered hotkey, and menu commands.
 
@@ -197,13 +199,16 @@ if executor.executionPresentation == .external {
   image, audio/video, PDF, archive, vCard, or font types. Dynamic UTIs must also
   be decoded through their `com.apple.nspboard-type` tags; comparing only the
   outer `dyn.*` identifier is insufficient.
-- Every clipboard result waits for a 120ms quiet window before classification.
-  Any changeCount update inside that window restarts it, even when item types
-  change: Qt sources may write temporary text, then a file URL, then the final
-  image as one `⌘C` transaction. After settling, publish only non-empty text;
-  otherwise restore an original textual snapshot or clear an original non-text
-  snapshot. Classification and finalization must use the settled changeCount so
-  a later write fails with `clipboardChanged` and is preserved.
+- Clipboard settling follows the capture intent automatically. A strict
+  `.textHitRequired` fallback waits 20ms after the first generation and treats a
+  second generation as `clipboardChanged`. Compatible pointer and explicit
+  `.enabled` fallback use a 120ms quiet window; any changeCount update restarts
+  that window, even when item types change. This supports Qt sources that write
+  temporary text, then a file URL, then the final image as one `⌘C` transaction
+  without imposing the same wait on strict paths. After settling, publish only
+  non-empty text; otherwise restore an original textual snapshot or clear an
+  original non-text snapshot. Classification and finalization share the same
+  settled changeCount guard so a later write is preserved.
 - Secure text fields fail with `secureInput` and never enter clipboard fallback.
   Selected text is never written to diagnostics; logs may contain only trigger
   type, AX role, error type, and bounds presence.
@@ -236,8 +241,10 @@ if executor.executionPresentation == .external {
 | Missing system-wide focus | Try frontmost-app focus, then pointer hit-test |
 | Text Marker selection only | Resolve text locally; bounds may fall back to pointer |
 | AX unsupported, fallback enabled | Temporarily copy, restore, and publish a new context |
+| Strict fallback receives one generation | Settle for 20ms, classify, and restore |
+| Strict fallback receives a second generation | Return `clipboardChanged`; preserve the later content |
 | Fallback timeout/cancel | Restore the owned clipboard generation; publish nothing |
-| Clipboard changes before the first quiet window completes | Restart the quiet window and classify only the final generation |
+| Compatible/explicit fallback changes before quiet | Restart the 120ms window and classify only the final generation |
 | Clipboard changes during classification or finalization | Return `clipboardChanged`; preserve the later content |
 | Clipboard item has file and text representations | Reject the object, restore, publish nothing |
 | Dynamic UTI resolves to a legacy file-list pasteboard type | Reject the object, restore, publish nothing |
@@ -257,6 +264,8 @@ if executor.executionPresentation == .external {
   cleaned without an overlay.
 - Good: WeChat writes temporary text, then `public.file-url`, then Qt image/TIFF;
   one quiet-window transaction classifies only the final image and cleans it.
+- Good: a strict text-hit fallback receives one text generation and settles in
+  20ms; a second generation aborts without overwriting it.
 - Base: TextEdit drag selection resolves standard selected text and range.
 - Good: double-clicking a Finder or IDE folder is rejected before copy when the
   hit path supplies no positive text-selection evidence.
@@ -276,7 +285,8 @@ if executor.executionPresentation == .external {
   second-mouse-down multi-click preflight propagation, safe missing-preflight
   fallback, empty-path compatible policy, AX hit classification for
   text/file-tree/tab/image/control targets, file-object
-  rejection, staged text/file-URL/Qt-image cleanup, native private-flavor restore,
+  rejection, exhaustive staged-write policy mapping, strict second-generation
+  preservation, staged text/file-URL/Qt-image cleanup, native private-flavor restore,
   policy persistence, capture-before-
   policy rejection, source switching, explicit-capture bypass, fail-before-
   clear snapshot limits, and Carbon hot-key ID isolation.
@@ -327,11 +337,13 @@ guard pasteboardSignature() == initialSignature else {
 }
 ```
 
-#### Correct: Settle the initiated copy, then guard finalization by generation
+#### Correct: Select settling from intent and keep finalization inside the transaction
 
 ```swift
-let settledChangeCount = try await settledCapturedChangeCount(from: firstChangeCount)
-try restore(snapshot, expectedChangeCount: settledChangeCount)
+let text = try await clipboardFallback.captureSelection(
+    sourceProcessIdentifier: source.processIdentifier,
+    acceptsStagedWrites: fallbackPolicy.acceptsStagedClipboardWrites
+)
 ```
 
 ## Good / Base / Bad Cases

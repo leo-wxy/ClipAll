@@ -5,6 +5,15 @@ enum SelectionFallbackPolicy: String, Equatable, Sendable {
     case textHitRequired
     case compatiblePointer
     case enabled
+
+    var acceptsStagedClipboardWrites: Bool {
+        switch self {
+        case .disabled, .textHitRequired:
+            false
+        case .compatiblePointer, .enabled:
+            true
+        }
+    }
 }
 
 enum SelectionAutomaticDisplayPolicy: String, CaseIterable, Codable, Hashable, Sendable {

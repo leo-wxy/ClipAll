@@ -1,0 +1,2 @@
+{"file":".trellis/spec/frontend/index.md","reason":"执行前端质量检查入口"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"验证模式映射、外部写入保护和真实 App 覆盖"}

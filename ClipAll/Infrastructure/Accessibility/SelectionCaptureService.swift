@@ -210,7 +210,8 @@ final class SelectionCaptureService: SelectionCapturing {
             )
             do {
                 let text = try await clipboardFallback.captureSelection(
-                    sourceProcessIdentifier: source.processIdentifier
+                    sourceProcessIdentifier: source.processIdentifier,
+                    acceptsStagedWrites: fallbackPolicy.acceptsStagedClipboardWrites
                 )
                 selection = CapturedSelection(text: text, bounds: nil)
                 captureSource = "clipboard"

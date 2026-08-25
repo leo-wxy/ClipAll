@@ -1,0 +1,3 @@
+{"file":".trellis/spec/frontend/index.md","reason":"确认取词基础设施改动适用的前端规范入口"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"遵循跨 App 选择、剪贴板事务和真实安装验收契约"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"拆分事务模式时复用共同恢复与最终化逻辑，避免双实现漂移"}
