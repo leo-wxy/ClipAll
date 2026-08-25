@@ -144,6 +144,9 @@ if executor.executionPresentation == .external {
 - `SelectionHitClassifier.multiClickFallbackPolicy(in:)` classifies the original
   AX hit path; an empty path uses compatible copy because the result type is the
   only generic evidence available for AX-opaque apps.
+- `ClipboardSelectionFallback.captureSelection(sourceProcessIdentifier:)` waits
+  for one quiet interval after the latest post-copy change before classifying the
+  captured pasteboard generation.
 - The async `SelectionCapturing.captureCurrentSelection(triggerLocation:fallbackPolicy:)`
   is the single capture entry used by pointer, registered hotkey, and menu commands.
 
@@ -194,11 +197,13 @@ if executor.executionPresentation == .external {
   image, audio/video, PDF, archive, vCard, or font types. Dynamic UTIs must also
   be decoded through their `com.apple.nspboard-type` tags; comparing only the
   outer `dyn.*` identifier is insufficient.
-- A rejected non-text result waits for a 120ms quiet window before finalization.
-  Repeated writes with the same item types and string representation restart the
-  quiet window; a changed signature is an external clipboard write and must be
-  preserved. After settling, restore an original textual clipboard snapshot or
-  clear an original non-text snapshot so copied objects cannot remain.
+- Every clipboard result waits for a 120ms quiet window before classification.
+  Any changeCount update inside that window restarts it, even when item types
+  change: Qt sources may write temporary text, then a file URL, then the final
+  image as one `⌘C` transaction. After settling, publish only non-empty text;
+  otherwise restore an original textual snapshot or clear an original non-text
+  snapshot. Classification and finalization must use the settled changeCount so
+  a later write fails with `clipboardChanged` and is preserved.
 - Secure text fields fail with `secureInput` and never enter clipboard fallback.
   Selected text is never written to diagnostics; logs may contain only trigger
   type, AX role, error type, and bounds presence.
@@ -232,7 +237,8 @@ if executor.executionPresentation == .external {
 | Text Marker selection only | Resolve text locally; bounds may fall back to pointer |
 | AX unsupported, fallback enabled | Temporarily copy, restore, and publish a new context |
 | Fallback timeout/cancel | Restore the owned clipboard generation; publish nothing |
-| Clipboard signature changes during settling | Preserve the external content; publish nothing |
+| Clipboard changes before the first quiet window completes | Restart the quiet window and classify only the final generation |
+| Clipboard changes during classification or finalization | Return `clipboardChanged`; preserve the later content |
 | Clipboard item has file and text representations | Reject the object, restore, publish nothing |
 | Dynamic UTI resolves to a legacy file-list pasteboard type | Reject the object, restore, publish nothing |
 | Secure field | Return `secureInput`; never copy or expose text |
@@ -249,6 +255,8 @@ if executor.executionPresentation == .external {
 - Good: PoPo exposes the same empty AX path and arrow cursor for text and images;
   compatible copy publishes text, while repeated Qt image writes settle and are
   cleaned without an overlay.
+- Good: WeChat writes temporary text, then `public.file-url`, then Qt image/TIFF;
+  one quiet-window transaction classifies only the final image and cleans it.
 - Base: TextEdit drag selection resolves standard selected text and range.
 - Good: double-clicking a Finder or IDE folder is rejected before copy when the
   hit path supplies no positive text-selection evidence.
@@ -268,7 +276,7 @@ if executor.executionPresentation == .external {
   second-mouse-down multi-click preflight propagation, safe missing-preflight
   fallback, empty-path compatible policy, AX hit classification for
   text/file-tree/tab/image/control targets, file-object
-  rejection, delayed repeated non-text cleanup, native private-flavor restore,
+  rejection, staged text/file-URL/Qt-image cleanup, native private-flavor restore,
   policy persistence, capture-before-
   policy rejection, source switching, explicit-capture bypass, fail-before-
   clear snapshot limits, and Carbon hot-key ID isolation.
@@ -309,6 +317,21 @@ if path.isEmpty { return .textHitRequired }
 
 ```swift
 return SelectionHitClassifier.multiClickFallbackPolicy(in: path)
+```
+
+#### Wrong: Treat a type change as a new clipboard owner before copy settles
+
+```swift
+guard pasteboardSignature() == initialSignature else {
+    throw ClipboardSelectionFallbackError.clipboardChanged
+}
+```
+
+#### Correct: Settle the initiated copy, then guard finalization by generation
+
+```swift
+let settledChangeCount = try await settledCapturedChangeCount(from: firstChangeCount)
+try restore(snapshot, expectedChangeCount: settledChangeCount)
 ```
 
 ## Good / Base / Bad Cases

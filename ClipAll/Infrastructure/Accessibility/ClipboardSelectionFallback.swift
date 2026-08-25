@@ -47,15 +47,9 @@ final class ClipboardSelectionFallback {
         let flags: PasteboardFlavorFlags
     }
 
-    private struct PasteboardSignature: Equatable {
-        let itemTypes: [[String]]
-        let text: String?
-    }
-
     private static let maximumItems = 16
     private static let maximumTypes = 64
     private static let maximumBytes = 32 * 1_024 * 1_024
-    private static let nonTextStabilityDelay: Duration = .milliseconds(120)
     private static let pasteboardTagClass = UTTagClass(rawValue: "com.apple.nspboard-type")
     private static let nonTextObjectTypeIdentifiers: Set<String> = [
         NSPasteboard.PasteboardType.fileURL.rawValue,
@@ -109,7 +103,7 @@ final class ClipboardSelectionFallback {
         pasteboard: any ClipboardPasteboard = NSPasteboard.general,
         timeout: Duration = .milliseconds(650),
         pollInterval: Duration = .milliseconds(10),
-        stabilityDelay: Duration = .milliseconds(20),
+        stabilityDelay: Duration = .milliseconds(120),
         sendCopy: CopyAction? = nil,
         isSourceFrontmost: SourceCheck? = nil
     ) {
@@ -150,34 +144,22 @@ final class ClipboardSelectionFallback {
 
                 let currentChangeCount = pasteboard.changeCount
                 if currentChangeCount != clearedChangeCount {
-                    if let capturedChangeCount, currentChangeCount != capturedChangeCount {
-                        throw ClipboardSelectionFallbackError.clipboardChanged
-                    } else if capturedChangeCount == nil {
-                        capturedChangeCount = currentChangeCount
-                    }
+                    capturedChangeCount = currentChangeCount
+                    let settledChangeCount = try await settledCapturedChangeCount(
+                        from: currentChangeCount,
+                        before: deadline,
+                        sourceProcessIdentifier: sourceProcessIdentifier
+                    )
+                    capturedChangeCount = settledChangeCount
 
                     if containsNonTextObject() {
-                        capturedChangeCount = try await settledNonTextChangeCount(
-                            from: currentChangeCount,
-                            before: deadline,
-                            sourceProcessIdentifier: sourceProcessIdentifier
-                        )
                         throw ClipboardSelectionFallbackError.nonTextContent
                     }
 
                     if let text = pasteboard.string(forType: .string),
                        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        try await Task.sleep(for: stabilityDelay)
-                        try Task.checkCancellation()
-                        guard isSourceFrontmost(sourceProcessIdentifier) else {
-                            throw ClipboardSelectionFallbackError.sourceUnavailable
-                        }
-                        guard pasteboard.changeCount == currentChangeCount else {
-                            throw ClipboardSelectionFallbackError.clipboardChanged
-                        }
-
                         clipboardFinalized = true
-                        try restore(snapshot, expectedChangeCount: currentChangeCount)
+                        try restore(snapshot, expectedChangeCount: settledChangeCount)
                         return text
                     }
                 }
@@ -228,42 +210,32 @@ final class ClipboardSelectionFallback {
         pasteboard.pasteboardItems?.contains { $0.types.contains(.string) } == true
     }
 
-    private func settledNonTextChangeCount(
+    private func settledCapturedChangeCount(
         from initialChangeCount: Int,
         before deadline: ContinuousClock.Instant,
         sourceProcessIdentifier: pid_t
     ) async throws -> Int {
         let clock = ContinuousClock()
-        let signature = pasteboardSignature()
         var expectedChangeCount = initialChangeCount
 
         while clock.now < deadline {
-            try await Task.sleep(for: Self.nonTextStabilityDelay)
+            try await Task.sleep(for: stabilityDelay)
             try Task.checkCancellation()
             guard isSourceFrontmost(sourceProcessIdentifier) else {
                 throw ClipboardSelectionFallbackError.sourceUnavailable
+            }
+            guard clock.now < deadline else {
+                throw ClipboardSelectionFallbackError.timedOut
             }
 
             let currentChangeCount = pasteboard.changeCount
             if currentChangeCount == expectedChangeCount {
                 return currentChangeCount
             }
-            guard containsNonTextObject(), pasteboardSignature() == signature else {
-                throw ClipboardSelectionFallbackError.clipboardChanged
-            }
             expectedChangeCount = currentChangeCount
         }
 
         throw ClipboardSelectionFallbackError.timedOut
-    }
-
-    private func pasteboardSignature() -> PasteboardSignature {
-        PasteboardSignature(
-            itemTypes: (pasteboard.pasteboardItems ?? []).map {
-                $0.types.map(\.rawValue)
-            },
-            text: pasteboard.string(forType: .string)
-        )
     }
 
     private static func isNonTextObjectType(_ identifier: String) -> Bool {

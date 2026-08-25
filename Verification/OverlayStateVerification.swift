@@ -90,7 +90,7 @@ enum OverlayStateVerification {
         try await verifyClipboardScenario("文件对象", verifyClipboardFallbackRejectsFileObject)
         try await verifyClipboardScenario("动态文件对象", verifyClipboardFallbackRejectsDynamicFileObject)
         try await verifyClipboardScenario("图片对象", verifyClipboardFallbackRejectsImageObject)
-        try await verifyClipboardScenario("非文字残留清理", verifyClipboardFallbackClearsPriorNonTextContent)
+        try await verifyClipboardScenario("分阶段非文字清理", verifyClipboardFallbackClearsStagedQtImageContent)
         try await verifyClipboardScenario("Chromium 真文字", verifyClipboardFallbackAcceptsChromiumText)
     }
 
@@ -358,7 +358,7 @@ enum OverlayStateVerification {
         }
     }
 
-    private static func verifyClipboardFallbackClearsPriorNonTextContent() async throws {
+    private static func verifyClipboardFallbackClearsStagedQtImageContent() async throws {
         let pasteboard = VerificationPasteboard()
         defer { pasteboard.clearContents() }
 
@@ -367,14 +367,28 @@ enum OverlayStateVerification {
         pasteboard.clearContents()
         _ = pasteboard.writeObjects([original])
 
-        var repeatedWriteTask: Task<Void, Never>?
-        let fallback = makeFallback(pasteboard: pasteboard) { _ in
-            let copied = NSPasteboardItem()
-            copied.setData(Data([0x02]), forType: .png)
-            pasteboard.clearContents()
-            _ = pasteboard.writeObjects([copied])
-            repeatedWriteTask = Task { @MainActor in
+        var stagedWriteTask: Task<Void, Never>?
+        let fallback = makeFallback(
+            pasteboard: pasteboard,
+            stabilityDelay: .milliseconds(10)
+        ) { _ in
+            writePasteboard(pasteboard, text: "temporary image label")
+            stagedWriteTask = Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(2))
+
+                let fileURL = NSPasteboardItem()
+                fileURL.setString("file:///tmp/image", forType: .fileURL)
+                pasteboard.clearContents()
+                _ = pasteboard.writeObjects([fileURL])
+
+                try? await Task.sleep(for: .milliseconds(2))
+                let copied = NSPasteboardItem()
+                copied.setData(Data([0x02]), forType: .tiff)
+                copied.setData(
+                    Data([0x03]),
+                    forType: .init("com.trolltech.anymime.application--x-qt-image")
+                )
+                copied.setString("file:///tmp/image", forType: .fileURL)
                 pasteboard.clearContents()
                 _ = pasteboard.writeObjects([copied])
             }
@@ -387,10 +401,10 @@ enum OverlayStateVerification {
         } catch let error as OverlayStateVerificationError {
             throw error
         } catch ClipboardSelectionFallbackError.nonTextContent {
-            await repeatedWriteTask?.value
+            await stagedWriteTask?.value
             try expect(
                 pasteboard.pasteboardItems?.isEmpty == true,
-                "重复写入完成后仍应清理拒绝的非文字残留"
+                "分阶段图片写入完成后仍应清理拒绝的非文字残留"
             )
         }
     }
