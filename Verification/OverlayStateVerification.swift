@@ -90,6 +90,7 @@ enum OverlayStateVerification {
         try await verifyClipboardScenario("文件对象", verifyClipboardFallbackRejectsFileObject)
         try await verifyClipboardScenario("动态文件对象", verifyClipboardFallbackRejectsDynamicFileObject)
         try await verifyClipboardScenario("图片对象", verifyClipboardFallbackRejectsImageObject)
+        try await verifyClipboardScenario("非文字残留清理", verifyClipboardFallbackClearsPriorNonTextContent)
         try await verifyClipboardScenario("Chromium 真文字", verifyClipboardFallbackAcceptsChromiumText)
     }
 
@@ -357,6 +358,43 @@ enum OverlayStateVerification {
         }
     }
 
+    private static func verifyClipboardFallbackClearsPriorNonTextContent() async throws {
+        let pasteboard = VerificationPasteboard()
+        defer { pasteboard.clearContents() }
+
+        let original = NSPasteboardItem()
+        original.setData(Data([0x01]), forType: .png)
+        pasteboard.clearContents()
+        _ = pasteboard.writeObjects([original])
+
+        var repeatedWriteTask: Task<Void, Never>?
+        let fallback = makeFallback(pasteboard: pasteboard) { _ in
+            let copied = NSPasteboardItem()
+            copied.setData(Data([0x02]), forType: .png)
+            pasteboard.clearContents()
+            _ = pasteboard.writeObjects([copied])
+            repeatedWriteTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(2))
+                pasteboard.clearContents()
+                _ = pasteboard.writeObjects([copied])
+            }
+            return true
+        }
+
+        do {
+            _ = try await fallback.captureSelection(sourceProcessIdentifier: 42)
+            throw OverlayStateVerificationError.failed("图片复制结果不得触发浮窗")
+        } catch let error as OverlayStateVerificationError {
+            throw error
+        } catch ClipboardSelectionFallbackError.nonTextContent {
+            await repeatedWriteTask?.value
+            try expect(
+                pasteboard.pasteboardItems?.isEmpty == true,
+                "重复写入完成后仍应清理拒绝的非文字残留"
+            )
+        }
+    }
+
     private static func verifyClipboardFallbackRejectsDynamicFileObject() async throws {
         let pasteboard = VerificationPasteboard()
         defer { pasteboard.clearContents() }
@@ -433,7 +471,7 @@ enum OverlayStateVerification {
 
     private static func makeFallback(
         pasteboard: VerificationPasteboard,
-        timeout: Duration = .milliseconds(100),
+        timeout: Duration = .milliseconds(500),
         stabilityDelay: Duration = .milliseconds(1),
         sendCopy: @escaping ClipboardSelectionFallback.CopyAction
     ) -> ClipboardSelectionFallback {
@@ -831,18 +869,8 @@ enum OverlayStateVerification {
 
     private static func verifySelectionHitClassifier() throws {
         try expect(
-            SelectionHitClassifier.multiClickFallbackPolicy(
-                in: [],
-                hasTextSelectionCursor: true
-            ) == .compatiblePointer,
-            "AX 命中链为空但系统显示文字光标时，双击应进入内容校验回退"
-        )
-        try expect(
-            SelectionHitClassifier.multiClickFallbackPolicy(
-                in: [],
-                hasTextSelectionCursor: false
-            ) == .textHitRequired,
-            "AX 命中链为空且系统不是文字光标时，双击必须保持严格门禁"
+            SelectionHitClassifier.multiClickFallbackPolicy(in: []) == .compatiblePointer,
+            "AX 命中链为空时，双击应进入纯文字内容校验回退"
         )
         try expect(
             !SelectionHitClassifier.allowsClipboardFallback(
@@ -981,11 +1009,8 @@ enum OverlayStateVerification {
             "图片目标不得借拖选兼容策略发送复制快捷键"
         )
         try expect(
-            SelectionHitClassifier.multiClickFallbackPolicy(
-                in: imagePath,
-                hasTextSelectionCursor: true
-            ) == .textHitRequired,
-            "AX 已明确识别为图片时，即使光标异常也必须保持严格门禁"
+            SelectionHitClassifier.multiClickFallbackPolicy(in: imagePath) == .textHitRequired,
+            "AX 已明确识别为图片时必须保持严格门禁"
         )
 
         let vscodeTreePath = [

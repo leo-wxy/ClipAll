@@ -113,11 +113,10 @@ enum SelectionHitClassifier {
     }
 
     static func multiClickFallbackPolicy(
-        in path: [SelectionHitEvidenceNode],
-        hasTextSelectionCursor: Bool
+        in path: [SelectionHitEvidenceNode]
     ) -> SelectionFallbackPolicy {
         if path.isEmpty {
-            return hasTextSelectionCursor ? .compatiblePointer : .textHitRequired
+            return .compatiblePointer
         }
         return allowsClipboardFallback(in: path, policy: .compatiblePointer)
             ? .compatiblePointer
@@ -156,29 +155,13 @@ final class SelectionCaptureService: SelectionCapturing {
         at triggerLocation: CGPoint
     ) -> SelectionFallbackPolicy {
         guard intent == .multiClick else { return intent.fallbackPolicy }
-        let cursor = NSCursor.currentSystem
-        let hasTextSelectionCursor = Self.isTextSelectionCursor(cursor)
         let path = hitEvidencePath(at: triggerLocation)
-        let policy = SelectionHitClassifier.multiClickFallbackPolicy(
-            in: path,
-            hasTextSelectionCursor: hasTextSelectionCursor
-        )
+        let policy = SelectionHitClassifier.multiClickFallbackPolicy(in: path)
         let roles = path.isEmpty ? "none" : path.prefix(6).map(\.role).joined(separator: ",")
-        let cursorKind = cursor == nil ? "unavailable" : hasTextSelectionCursor ? "iBeam" : "other"
         Self.logger.debug(
-            "Pointer fallback preflight: intent=multiClick, policy=\(policy.rawValue, privacy: .public), roles=\(roles, privacy: .public), cursor=\(cursorKind, privacy: .public)"
+            "Pointer fallback preflight: intent=multiClick, policy=\(policy.rawValue, privacy: .public), roles=\(roles, privacy: .public)"
         )
         return policy
-    }
-
-    private static func isTextSelectionCursor(_ cursor: NSCursor?) -> Bool {
-        guard let cursor,
-              cursor.hotSpot == NSCursor.iBeam.hotSpot,
-              let cursorImage = cursor.image.tiffRepresentation,
-              let iBeamImage = NSCursor.iBeam.image.tiffRepresentation else {
-            return false
-        }
-        return cursorImage == iBeamImage
     }
 
     func captureCurrentSelection(
