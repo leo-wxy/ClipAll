@@ -223,11 +223,9 @@ enum OverlayStateVerification {
         defer { pasteboard.clearContents() }
         writePasteboard(pasteboard, text: "original")
 
-        var secondWriteTask: Task<Void, Never>?
         let fallback = makeFallback(pasteboard: pasteboard) { _ in
             writePasteboard(pasteboard, text: "selected")
-            secondWriteTask = Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(2))
+            pasteboard.afterNextChangeCountRead = {
                 writePasteboard(pasteboard, text: "external")
             }
             return true
@@ -242,7 +240,6 @@ enum OverlayStateVerification {
         } catch let error as OverlayStateVerificationError {
             throw error
         } catch ClipboardSelectionFallbackError.clipboardChanged {
-            await secondWriteTask?.value
             try expect(
                 pasteboard.string(forType: .string) == "external",
                 "单阶段复制不得覆盖首写后的新剪贴板内容"
@@ -285,7 +282,7 @@ enum OverlayStateVerification {
         let fallback = makeFallback(
             pasteboard: pasteboard,
             timeout: .milliseconds(20),
-            stabilityDelay: .milliseconds(500)
+            stabilityDelay: .seconds(2)
         ) { _ in
             writePasteboard(pasteboard, text: "selected")
             return true
@@ -303,7 +300,7 @@ enum OverlayStateVerification {
             throw error
         } catch ClipboardSelectionFallbackError.timedOut {
             try expect(
-                startedAt.duration(to: clock.now) < .milliseconds(250),
+                startedAt.duration(to: clock.now) < .seconds(1),
                 "稳定等待不得越过复制事务的硬总 deadline"
             )
         }
@@ -365,17 +362,23 @@ enum OverlayStateVerification {
         defer { pasteboard.clearContents() }
         writePasteboard(pasteboard, text: "original")
 
+        var didSendCopy = false
         let fallback = makeFallback(
             pasteboard: pasteboard,
             timeout: .seconds(1)
-        ) { _ in true }
+        ) { _ in
+            didSendCopy = true
+            return true
+        }
         let task = Task { @MainActor in
             try await fallback.captureSelection(
                 sourceProcessIdentifier: 42,
                 acceptsStagedWrites: false
             )
         }
-        try await Task.sleep(for: .milliseconds(10))
+        while !didSendCopy {
+            await Task.yield()
+        }
         task.cancel()
         do {
             _ = try await task.value
@@ -494,30 +497,28 @@ enum OverlayStateVerification {
         pasteboard.clearContents()
         _ = pasteboard.writeObjects([original])
 
-        var stagedWriteTask: Task<Void, Never>?
         let fallback = makeFallback(
             pasteboard: pasteboard,
             stabilityDelay: .milliseconds(10)
         ) { _ in
             writePasteboard(pasteboard, text: "temporary image label")
-            stagedWriteTask = Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(2))
-
+            pasteboard.afterNextChangeCountRead = {
                 let fileURL = NSPasteboardItem()
                 fileURL.setString("file:///tmp/image", forType: .fileURL)
                 pasteboard.clearContents()
                 _ = pasteboard.writeObjects([fileURL])
 
-                try? await Task.sleep(for: .milliseconds(2))
-                let copied = NSPasteboardItem()
-                copied.setData(Data([0x02]), forType: .tiff)
-                copied.setData(
-                    Data([0x03]),
-                    forType: .init("com.trolltech.anymime.application--x-qt-image")
-                )
-                copied.setString("file:///tmp/image", forType: .fileURL)
-                pasteboard.clearContents()
-                _ = pasteboard.writeObjects([copied])
+                pasteboard.afterNextChangeCountRead = {
+                    let copied = NSPasteboardItem()
+                    copied.setData(Data([0x02]), forType: .tiff)
+                    copied.setData(
+                        Data([0x03]),
+                        forType: .init("com.trolltech.anymime.application--x-qt-image")
+                    )
+                    copied.setString("file:///tmp/image", forType: .fileURL)
+                    pasteboard.clearContents()
+                    _ = pasteboard.writeObjects([copied])
+                }
             }
             return true
         }
@@ -531,7 +532,6 @@ enum OverlayStateVerification {
         } catch let error as OverlayStateVerificationError {
             throw error
         } catch ClipboardSelectionFallbackError.nonTextContent {
-            await stagedWriteTask?.value
             try expect(
                 pasteboard.pasteboardItems?.isEmpty == true,
                 "分阶段图片写入完成后仍应清理拒绝的非文字残留"
@@ -1420,15 +1420,23 @@ private final class VerificationSelectionCapture: SelectionCapturing {
 
 @MainActor
 private final class VerificationPasteboard: ClipboardPasteboard {
-    private(set) var changeCount = 0
+    private var storedChangeCount = 0
+    var changeCount: Int {
+        let value = storedChangeCount
+        let action = afterNextChangeCountRead
+        afterNextChangeCountRead = nil
+        action?()
+        return value
+    }
     private(set) var pasteboardItems: [NSPasteboardItem]? = []
+    var afterNextChangeCountRead: (() -> Void)?
     var afterNextStringRead: (() -> Void)?
 
     @discardableResult
     func clearContents() -> Int {
         pasteboardItems = []
-        changeCount += 1
-        return changeCount
+        storedChangeCount += 1
+        return storedChangeCount
     }
 
     func string(forType dataType: NSPasteboard.PasteboardType) -> String? {
