@@ -1228,6 +1228,7 @@ enum OverlayStateVerification {
 
         let below = OverlayPlacement.calculate(
             anchor: CGRect(x: 600, y: 400, width: 20, height: 20),
+            triggerLocation: CGPoint(x: 610, y: 410),
             panelSize: size,
             visibleFrame: visible
         )
@@ -1235,6 +1236,7 @@ enum OverlayStateVerification {
 
         let above = OverlayPlacement.calculate(
             anchor: CGRect(x: 600, y: 20, width: 20, height: 20),
+            triggerLocation: CGPoint(x: 610, y: 30),
             panelSize: size,
             visibleFrame: visible
         )
@@ -1276,6 +1278,7 @@ enum OverlayStateVerification {
         let secondary = CGRect(x: -1_280, y: -120, width: 1_280, height: 800)
         let clamped = OverlayPlacement.calculate(
             anchor: CGRect(x: -1_400, y: -100, width: 20, height: 20),
+            triggerLocation: CGPoint(x: -1_390, y: -90),
             panelSize: size,
             visibleFrame: secondary
         )
@@ -1285,6 +1288,17 @@ enum OverlayStateVerification {
                 && clamped.minY >= secondary.minY + OverlayPlacement.edgeInset
                 && clamped.maxY <= secondary.maxY - OverlayPlacement.edgeInset,
             "负坐标副屏上的浮层应完整留在可见区域"
+        )
+
+        let oversized = OverlayPlacement.calculate(
+            anchor: visible,
+            triggerLocation: CGPoint(x: 700, y: 80),
+            panelSize: size,
+            visibleFrame: visible
+        )
+        try expect(
+            oversized.origin == CGPoint(x: 600.5, y: 89),
+            "选区上下均放不下时应回退到触发点附近，而不是钳到屏幕顶部"
         )
     }
 

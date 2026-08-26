@@ -177,6 +177,7 @@ final class SelectionOverlayCoordinator {
         } else {
             frame = OverlayPlacement.calculate(
                 anchor: anchor,
+                triggerLocation: context.triggerLocation,
                 panelSize: size,
                 visibleFrame: screen.visibleFrame
             )

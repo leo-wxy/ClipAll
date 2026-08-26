@@ -8,22 +8,30 @@ struct OverlayPlacement: Sendable {
 
     static func calculate(
         anchor: CGRect,
+        triggerLocation: CGPoint,
         panelSize: CGSize,
         visibleFrame: CGRect
     ) -> CGRect {
-        let preferredX = anchor.midX - panelSize.width / 2
+        let minimumY = visibleFrame.minY + edgeInset
+        let maximumY = visibleFrame.maxY - edgeInset
+        let fitsBelow = anchor.minY - selectionGap - panelSize.height >= minimumY
+        let fitsAbove = anchor.maxY + selectionGap + panelSize.height <= maximumY
+        let placementAnchor = fitsBelow || fitsAbove
+            ? anchor
+            : CGRect(origin: triggerLocation, size: CGSize(width: 1, height: 1))
+
+        let preferredX = placementAnchor.midX - panelSize.width / 2
         let clampedX = min(
             max(preferredX, visibleFrame.minX + edgeInset),
             max(visibleFrame.minX + edgeInset, visibleFrame.maxX - panelSize.width - edgeInset)
         )
 
-        let belowY = anchor.minY - selectionGap - panelSize.height
-        let aboveY = anchor.maxY + selectionGap
-        let fitsBelow = belowY >= visibleFrame.minY + edgeInset
-        let preferredY = fitsBelow ? belowY : aboveY
+        let belowY = placementAnchor.minY - selectionGap - panelSize.height
+        let aboveY = placementAnchor.maxY + selectionGap
+        let preferredY = belowY >= minimumY ? belowY : aboveY
         let clampedY = min(
-            max(preferredY, visibleFrame.minY + edgeInset),
-            max(visibleFrame.minY + edgeInset, visibleFrame.maxY - panelSize.height - edgeInset)
+            max(preferredY, minimumY),
+            max(minimumY, maximumY - panelSize.height)
         )
 
         return CGRect(origin: CGPoint(x: clampedX, y: clampedY), size: panelSize)
