@@ -142,8 +142,9 @@ if executor.executionPresentation == .external {
 - `SelectionCapturing.preflightFallbackPolicy(for:at:)` classifies the original
   second mouse-down target before a multi-click can replace it with new UI.
 - `SelectionHitClassifier.multiClickFallbackPolicy(in:)` classifies the original
-  AX hit path; an empty path uses compatible copy because the result type is the
-  only generic evidence available for AX-opaque apps.
+  AX hit path. A truly empty path uses compatible copy for AX-opaque apps; a
+  path beginning at `AXWindow` or `AXApplication` remains strict because it
+  proves only that a window was hit, not that the pointer hit selectable text.
 - `SelectionFallbackPolicy.acceptsStagedClipboardWrites` exhaustively maps
   `.disabled` and `.textHitRequired` to `false`, and `.compatiblePointer` and
   `.enabled` to `true`.
@@ -183,9 +184,10 @@ if executor.executionPresentation == .external {
   path. A non-empty custom text path without hard roles/actions may use
   `.compatiblePointer`. An empty AX path also uses compatible copy because some
   Qt/QML apps expose identical empty paths and arrow cursors for text and images;
-  the copied result is validated before publication. An explicit image/control
-  path and a missing second-mouse-down preflight remain strict. Capture must use
-  the original mouse-up location rather than the cursor's later position.
+  the copied result is validated before publication. A root-only
+  `AXWindow -> AXApplication` path, an explicit image/control path, and a missing
+  second-mouse-down preflight remain strict. Capture must use the original
+  mouse-up location rather than the cursor's later position.
   `AXShowMenu` alone is not a blocker
   because Electron text surfaces expose it together with real selection semantics.
   Shift-click is AX-only.
@@ -234,6 +236,7 @@ if executor.executionPresentation == .external {
 | Double/triple click with AX text | Capture after mouse-up without fallback |
 | Double/triple click with an opaque custom-text preflight path | Try compatible copy using the original pointer location |
 | Double/triple click with an empty AX path | Try compatible copy; publish only validated non-empty text |
+| Double/triple click with only `AXWindow` / `AXApplication` | Keep `textHitRequired`; reject before `⌘C` |
 | Double/triple click whose original target is image/control | Keep `textHitRequired`; reject before `⌘C` |
 | Double/triple click with no second-mouse-down preflight | Keep `textHitRequired`; reject before `⌘C` |
 | VSCode text path with selection attributes and `AXShowMenu` | Accept after the complete path has no hard control role |
@@ -267,6 +270,8 @@ if executor.executionPresentation == .external {
 - Good: PoPo exposes the same empty AX path and arrow cursor for text and images;
   compatible copy publishes text, while repeated Qt image writes settle and are
   cleaned without an overlay.
+- Good: DevEco exposes only `AXWindow -> AXApplication` for a file-node hit;
+  multi-click remains strict and cannot copy a retained editor selection.
 - Good: WeChat writes temporary text, then `public.file-url`, then Qt image/TIFF;
   one quiet-window transaction classifies only the final image and cleans it.
 - Good: a strict text-hit fallback receives one text generation and settles in
@@ -289,8 +294,8 @@ if executor.executionPresentation == .external {
   success, equal-text detection, multi-type restore, timeout, cancellation,
   concurrent clipboard changes, compatible drag for empty/custom AX paths,
   second-mouse-down multi-click preflight propagation, safe missing-preflight
-  fallback, empty-path compatible policy, AX hit classification for
-  text/file-tree/tab/image/control targets, file-object
+  fallback, empty-path compatible policy, root-only-path strict policy, AX hit
+  classification for text/file-tree/tab/image/control targets, file-object
   rejection, exhaustive staged-write policy mapping, strict second-generation
   preservation before and after the first poll, hard-deadline settling, staged
   text/file-URL/Qt-image cleanup, native private-flavor restore,

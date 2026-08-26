@@ -250,12 +250,14 @@ SelectionMonitor.capturePointerSelection(
 - For multi-click AX results with selection bounds, require the trigger point to
   intersect those bounds with the existing drag-distance tolerance. A focused
   element may retain a stale non-empty AX selection after the user clicks elsewhere.
-- Automatic drag and multi-click require positive text-selection evidence in a
-  non-empty hit path; an empty or known non-text path rejects before synthetic
-  `Command-C`.
+- Automatic drag remains compatible on AX-opaque targets. Multi-click may use
+  compatible copy for a truly empty hit path or a custom child path without hard
+  control evidence, but a root-only `AXWindow` / `AXApplication` path rejects
+  before synthetic `Command-C` because it cannot tie focused text to the click.
 - Any blocking role/action rejects fallback. Scan the complete bounded path so
   a text-like child cannot hide an ancestor `AXRow`, Tab, button, or menu item.
-- A non-empty path with no selection semantics rejects fallback.
+- A non-empty custom-child path without selection semantics may proceed only
+  under `.compatiblePointer`; `.textHitRequired` still rejects it.
 - A path with selection attributes, or number-of-characters plus visible-range
   semantics, allows fallback when no blocking node exists.
 - Do not add bundle-specific allowlists or fixed AX settle delays for an App
@@ -283,11 +285,13 @@ SelectionMonitor.capturePointerSelection(
 | AX selection succeeds | Publish AX selection; do not send copy |
 | Multi-click AX bounds do not contain the trigger point | Invalidate as a stale focused selection |
 | Drag + text AX hit path | Try constrained clipboard fallback |
-| Drag + empty or known non-text hit path | Suppress before sending copy |
-| Multi-click + empty AX hit path | Suppress before sending copy |
+| Drag + empty hit path | Try compatible copy and validate the result |
+| Drag + known non-text hit path | Suppress before sending copy |
+| Multi-click + empty AX hit path | Try compatible copy and validate the result |
+| Multi-click + only `AXWindow` / `AXApplication` | Suppress before sending copy |
 | Multi-click + text path | Try constrained clipboard fallback |
 | Multi-click + blocking role/action | Suppress before sending copy |
-| Multi-click + non-empty path without selection semantics | Suppress before sending copy |
+| Multi-click + custom child path without blockers | Try compatible copy and validate the result |
 | Shift-click + AX failure | Suppress clipboard fallback |
 | Clipboard returns empty, times out, or contains a non-text object | Restore safely and publish nothing |
 | Clipboard changes concurrently | Preserve the newer external content |
@@ -295,8 +299,10 @@ SelectionMonitor.capturePointerSelection(
 
 ### 5. Good / Base / Bad Cases
 
-- Good: POPO exposes no focused or hit AX element; automatic pointer capture
-  suppresses fallback, while explicit hotkey/menu capture remains available.
+- Good: POPO exposes no focused or hit AX element; compatible pointer capture
+  validates its copied result, while explicit hotkey/menu capture remains available.
+- Good: an IDE file-node hit exposes only `AXWindow -> AXApplication`; multi-click
+  suppresses fallback instead of copying a retained editor selection.
 - Base: VSCode / VSCodium text surfaces expose selection semantics and continue
   to work.
 - Good: IDE file-tree rows and Tabs expose blocking or non-text evidence and
@@ -314,7 +320,8 @@ SelectionMonitor.capturePointerSelection(
 ### 6. Tests Required
 
 - `Scripts/verify-overlay-state.sh` must assert:
-  - empty hit paths reject automatic drag and multi-click fallback;
+  - empty hit paths allow compatible drag and multi-click fallback;
+  - root-only `AXWindow` / `AXApplication` paths reject multi-click fallback;
   - known text surfaces allow fallback;
   - image, file-tree, Tab, button, and non-empty non-text paths reject fallback;
   - drag, multi-click, shift-click, and normal-click policies remain stable;

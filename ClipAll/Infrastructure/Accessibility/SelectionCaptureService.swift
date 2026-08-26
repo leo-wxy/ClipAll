@@ -118,6 +118,9 @@ enum SelectionHitClassifier {
         if path.isEmpty {
             return .compatiblePointer
         }
+        if path.first?.role == "AXWindow" || path.first?.role == "AXApplication" {
+            return .textHitRequired
+        }
         return allowsClipboardFallback(in: path, policy: .compatiblePointer)
             ? .compatiblePointer
             : .textHitRequired

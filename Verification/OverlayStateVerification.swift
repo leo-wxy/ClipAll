@@ -1041,6 +1041,14 @@ enum OverlayStateVerification {
             SelectionHitClassifier.multiClickFallbackPolicy(in: []) == .compatiblePointer,
             "AX 命中链为空时，双击应进入纯文字内容校验回退"
         )
+        let rootOnlyPath = [
+            SelectionHitEvidenceNode(role: "AXWindow", actions: ["AXRaise"], attributes: []),
+            SelectionHitEvidenceNode(role: "AXApplication", actions: [], attributes: []),
+        ]
+        try expect(
+            SelectionHitClassifier.multiClickFallbackPolicy(in: rootOnlyPath) == .textHitRequired,
+            "只有窗口根节点的双击不得复制焦点控件里的残留选区"
+        )
         try expect(
             !SelectionHitClassifier.allowsClipboardFallback(
                 in: [],
