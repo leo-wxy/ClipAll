@@ -16,21 +16,21 @@
 
 - 策略必须是内部自动决策，不新增设置入口、持久化字段、应用白名单或剪贴板类型白名单。
 - `.disabled` 不得触发剪贴板回退。
-- `.textHitRequired` 使用 `singleWrite`：首个写入后只保留约 20ms 的稳定检查；若随后出现新 generation，保守返回 `clipboardChanged`，不得覆盖外部写入。
+- `.textHitRequired` 使用 `singleWrite`：首次观察必须是清空后的紧邻 generation；首次轮询已经跨过一代或随后出现新 generation 时，保守返回 `clipboardChanged`，不得覆盖外部写入。
 - `.compatiblePointer` 使用 `stagedWrite`：每次 change count 变化都重置 120ms 安静窗口，直到稳定后再判断最终内容。
 - `.enabled` 使用 `stagedWrite`，只在显式取词且 Accessibility 读取失败后承担额外等待，以保留微信、Qt 等分阶段复制兼容性。
 - 复用现有 `SelectionFallbackPolicy` 做穷举映射，不为两种事务行为新增独立模式类型。
-- 两种模式都必须保留现有 650ms 总超时、源进程前台校验、任务取消、原剪贴板快照恢复，以及最终化时的精确 change count 守卫。
-- 只对稳定后的最终内容进行文本/非文本分类；最终为非文本时恢复原快照，若原剪贴板为空则清空本次复制内容。
+- 两种模式都必须保留现有 650ms 硬总超时、源进程前台校验、任务取消、原剪贴板快照恢复，以及最终化时的精确 change count 守卫；任何等待都不得越过 deadline。
+- 只对稳定后的最终内容进行文本/非文本分类；最终为非文本时，原剪贴板为纯文字则恢复，原本为非文字或空则清空本次复制内容。
 - 分类完成到恢复/清理之间若出现新写入，必须保留新内容并返回 `clipboardChanged`。
 - 不改变 Accessibility 直接取词、选区几何、浮窗展示或用户可见交互。
 
 ## Acceptance Criteria
 
 - [x] 测试覆盖四种 `SelectionFallbackPolicy` 的完整模式映射：`.disabled` 不调用、`.textHitRequired` 单阶段、`.compatiblePointer` 与 `.enabled` 多阶段。
-- [x] `singleWrite` 覆盖正常文本，以及首个写入后的第二次 generation；后者返回 `clipboardChanged` 并保留新内容。
+- [x] `singleWrite` 覆盖正常文本、首个写入后的第二次 generation，以及首次轮询前已连续发生两次 generation；后两者返回 `clipboardChanged` 并保留新内容。
 - [x] `stagedWrite` 覆盖微信真实顺序：临时文本 → 文件 URL → Qt 图片/TIFF；最终返回 `nonTextContent` 并清理本次图片写入，同时覆盖 Chromium 多格式文字。
-- [x] 两种模式复用同一状态机；共享测试覆盖超时、取消、恢复原快照、不安全快照和最终化阶段外部写入，不为模式复制重复用例。
+- [x] 两种模式复用同一状态机；共享测试覆盖硬总超时、取消、恢复原快照、不安全快照和最终化阶段外部写入，不为模式复制重复用例。
 - [x] 两种模式共享内容分类与最终化逻辑，不复制出两套容易漂移的恢复/清理实现。
 - [x] 不新增 UI、设置 schema、应用名单或 UTI 特判。
 - [x] 定向状态验证、完整验证、App 构建和 `git diff --check` 全部通过。

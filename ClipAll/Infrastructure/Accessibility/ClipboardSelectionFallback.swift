@@ -148,6 +148,9 @@ final class ClipboardSelectionFallback {
 
                 let currentChangeCount = pasteboard.changeCount
                 if currentChangeCount != clearedChangeCount {
+                    guard acceptsStagedWrites || currentChangeCount == clearedChangeCount + 1 else {
+                        throw ClipboardSelectionFallbackError.clipboardChanged
+                    }
                     capturedChangeCount = currentChangeCount
                     let settledChangeCount = try await settledCapturedChangeCount(
                         from: currentChangeCount,
@@ -169,7 +172,7 @@ final class ClipboardSelectionFallback {
                     }
                 }
 
-                try await Task.sleep(for: pollInterval)
+                try await clock.sleep(until: min(clock.now.advanced(by: pollInterval), deadline))
             }
 
             throw ClipboardSelectionFallbackError.timedOut
@@ -226,7 +229,7 @@ final class ClipboardSelectionFallback {
         var expectedChangeCount = initialChangeCount
 
         while clock.now < deadline {
-            try await Task.sleep(for: delay)
+            try await clock.sleep(until: min(clock.now.advanced(by: delay), deadline))
             try Task.checkCancellation()
             guard isSourceFrontmost(sourceProcessIdentifier) else {
                 throw ClipboardSelectionFallbackError.sourceUnavailable

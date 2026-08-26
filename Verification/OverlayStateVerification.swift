@@ -88,6 +88,11 @@ enum OverlayStateVerification {
             "单阶段二次写入",
             verifyClipboardFallbackSingleWritePreservesSecondGeneration
         )
+        try await verifyClipboardScenario(
+            "单阶段首次轮询前二次写入",
+            verifyClipboardFallbackSingleWriteRejectsUnobservedSecondGeneration
+        )
+        try await verifyClipboardScenario("硬总超时", verifyClipboardFallbackHonorsHardDeadline)
         try await verifyClipboardScenario("超时恢复", verifyClipboardFallbackRestoresAfterTimeout)
         try await verifyClipboardScenario("并发写入", verifyClipboardFallbackPreservesExternalChange)
         try await verifyClipboardScenario("取消恢复", verifyClipboardFallbackRestoresAfterCancellation)
@@ -242,6 +247,65 @@ enum OverlayStateVerification {
             try expect(
                 pasteboard.string(forType: .string) == "external",
                 "单阶段复制不得覆盖首写后的新剪贴板内容"
+            )
+        }
+    }
+
+    private static func verifyClipboardFallbackSingleWriteRejectsUnobservedSecondGeneration() async throws {
+        let pasteboard = VerificationPasteboard()
+        defer { pasteboard.clearContents() }
+        writePasteboard(pasteboard, text: "original")
+
+        let fallback = makeFallback(pasteboard: pasteboard) { _ in
+            writePasteboard(pasteboard, text: "selected")
+            writePasteboard(pasteboard, text: "external")
+            return true
+        }
+
+        do {
+            _ = try await fallback.captureSelection(
+                sourceProcessIdentifier: 42,
+                acceptsStagedWrites: false
+            )
+            throw OverlayStateVerificationError.failed("首次轮询前的第二代写入应中止单阶段回退")
+        } catch let error as OverlayStateVerificationError {
+            throw error
+        } catch ClipboardSelectionFallbackError.clipboardChanged {
+            try expect(
+                pasteboard.string(forType: .string) == "external",
+                "单阶段回退不得覆盖首次轮询前的新剪贴板内容"
+            )
+        }
+    }
+
+    private static func verifyClipboardFallbackHonorsHardDeadline() async throws {
+        let pasteboard = VerificationPasteboard()
+        defer { pasteboard.clearContents() }
+        writePasteboard(pasteboard, text: "original")
+
+        let fallback = makeFallback(
+            pasteboard: pasteboard,
+            timeout: .milliseconds(20),
+            stabilityDelay: .milliseconds(500)
+        ) { _ in
+            writePasteboard(pasteboard, text: "selected")
+            return true
+        }
+        let clock = ContinuousClock()
+        let startedAt = clock.now
+
+        do {
+            _ = try await fallback.captureSelection(
+                sourceProcessIdentifier: 42,
+                acceptsStagedWrites: true
+            )
+            throw OverlayStateVerificationError.failed("超过总 deadline 的稳定等待不得返回文字")
+        } catch let error as OverlayStateVerificationError {
+            throw error
+        } catch ClipboardSelectionFallbackError.timedOut {
+            try expect(
+                startedAt.duration(to: clock.now) < .milliseconds(250),
+                "稳定等待不得越过复制事务的硬总 deadline"
             )
         }
     }
@@ -1384,7 +1448,6 @@ private final class VerificationPasteboard: ClipboardPasteboard {
         let items = objects.compactMap { $0 as? NSPasteboardItem }
         guard items.count == objects.count else { return false }
         pasteboardItems = items
-        changeCount += 1
         return true
     }
 }

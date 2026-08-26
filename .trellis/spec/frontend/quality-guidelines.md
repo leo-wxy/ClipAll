@@ -200,15 +200,19 @@ if executor.executionPresentation == .external {
   be decoded through their `com.apple.nspboard-type` tags; comparing only the
   outer `dyn.*` identifier is insufficient.
 - Clipboard settling follows the capture intent automatically. A strict
-  `.textHitRequired` fallback waits 20ms after the first generation and treats a
-  second generation as `clipboardChanged`. Compatible pointer and explicit
-  `.enabled` fallback use a 120ms quiet window; any changeCount update restarts
+  `.textHitRequired` fallback requires the first observed change count to be the
+  generation immediately after ClipAll cleared the pasteboard, waits 20ms, and
+  treats either a skipped or later generation as `clipboardChanged`. Compatible
+  pointer and explicit `.enabled` fallback use a 120ms quiet window; any
+  changeCount update restarts
   that window, even when item types change. This supports Qt sources that write
   temporary text, then a file URL, then the final image as one `⌘C` transaction
   without imposing the same wait on strict paths. After settling, publish only
   non-empty text; otherwise restore an original textual snapshot or clear an
   original non-text snapshot. Classification and finalization share the same
   settled changeCount guard so a later write is preserved.
+- Every poll and settling sleep is capped at the existing transaction deadline;
+  the 650ms timeout is a hard upper bound rather than a check after a full delay.
 - Secure text fields fail with `secureInput` and never enter clipboard fallback.
   Selected text is never written to diagnostics; logs may contain only trigger
   type, AX role, error type, and bounds presence.
@@ -242,8 +246,9 @@ if executor.executionPresentation == .external {
 | Text Marker selection only | Resolve text locally; bounds may fall back to pointer |
 | AX unsupported, fallback enabled | Temporarily copy, restore, and publish a new context |
 | Strict fallback receives one generation | Settle for 20ms, classify, and restore |
-| Strict fallback receives a second generation | Return `clipboardChanged`; preserve the later content |
+| Strict fallback first observes a skipped generation or later receives a second one | Return `clipboardChanged`; preserve the later content |
 | Fallback timeout/cancel | Restore the owned clipboard generation; publish nothing |
+| A poll or quiet window would cross the 650ms deadline | Sleep only until the deadline, then time out |
 | Compatible/explicit fallback changes before quiet | Restart the 120ms window and classify only the final generation |
 | Clipboard changes during classification or finalization | Return `clipboardChanged`; preserve the later content |
 | Clipboard item has file and text representations | Reject the object, restore, publish nothing |
@@ -265,7 +270,8 @@ if executor.executionPresentation == .external {
 - Good: WeChat writes temporary text, then `public.file-url`, then Qt image/TIFF;
   one quiet-window transaction classifies only the final image and cleans it.
 - Good: a strict text-hit fallback receives one text generation and settles in
-  20ms; a second generation aborts without overwriting it.
+  20ms; a second generation aborts without overwriting it even when both writes
+  completed before the first poll.
 - Base: TextEdit drag selection resolves standard selected text and range.
 - Good: double-clicking a Finder or IDE folder is rejected before copy when the
   hit path supplies no positive text-selection evidence.
@@ -286,7 +292,8 @@ if executor.executionPresentation == .external {
   fallback, empty-path compatible policy, AX hit classification for
   text/file-tree/tab/image/control targets, file-object
   rejection, exhaustive staged-write policy mapping, strict second-generation
-  preservation, staged text/file-URL/Qt-image cleanup, native private-flavor restore,
+  preservation before and after the first poll, hard-deadline settling, staged
+  text/file-URL/Qt-image cleanup, native private-flavor restore,
   policy persistence, capture-before-
   policy rejection, source switching, explicit-capture bypass, fail-before-
   clear snapshot limits, and Carbon hot-key ID isolation.
@@ -344,6 +351,22 @@ let text = try await clipboardFallback.captureSelection(
     sourceProcessIdentifier: source.processIdentifier,
     acceptsStagedWrites: fallbackPolicy.acceptsStagedClipboardWrites
 )
+```
+
+#### Wrong: Accept any first observed generation in strict mode
+
+```swift
+if currentChangeCount != clearedChangeCount {
+    settle(from: currentChangeCount)
+}
+```
+
+#### Correct: Reject a generation skipped before the first poll
+
+```swift
+guard acceptsStagedWrites || currentChangeCount == clearedChangeCount + 1 else {
+    throw ClipboardSelectionFallbackError.clipboardChanged
+}
 ```
 
 ## Good / Base / Bad Cases

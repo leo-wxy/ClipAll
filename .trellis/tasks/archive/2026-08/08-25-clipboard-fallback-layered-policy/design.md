@@ -39,6 +39,7 @@ func captureSelection(
 
 ### `singleWrite`
 
+- 首次观察到的 change count 必须是 ClipAll 清空后的紧邻 generation；如果首次轮询已经跨过一代，直接按 `clipboardChanged` 处理。
 - 观察到首个 change count 后等待约 20ms。
 - 期间没有变化：进入最终分类。
 - 期间出现第二个 generation：立即按 `clipboardChanged` 处理，不把后续内容归属于本次复制。
@@ -49,6 +50,8 @@ func captureSelection(
 - 每次 change count 变化都重置窗口。
 - 连续稳定 120ms 后进入最终分类。
 - 整个事务仍受 650ms 总超时约束。
+
+两种模式的每次休眠都只等待 deadline 前的剩余时间，650ms 是硬上限而不是下一次轮询前的软检查点。
 
 ## Shared Classification and Finalization
 
@@ -69,7 +72,7 @@ func captureSelection(
 ## Verification Design
 
 - 模式映射做穷举测试，避免未来新增策略后默默落入默认值。
-- 用生产一致的 20ms 延迟测试 `singleWrite` 的首写成功和二次写入保护，不为测试增加额外配置入口。
+- 让测试剪贴板与 AppKit 一致，只在 `clearContents()` 时增加 change count；用生产一致的 20ms 延迟测试 `singleWrite` 的首写成功、首次轮询前二次写入和后续二次写入保护。
 - 用临时文本 → 文件 URL → Qt 图片/TIFF 回归序列测试 `stagedWrite`。
 - 模式分支各保留一个最小回归；超时、取消、快照恢复与最终化阶段外部写入由共享状态机测试一次，不复制两套用例。
 - 最后执行完整脚本、稳定签名安装与真实应用验收。

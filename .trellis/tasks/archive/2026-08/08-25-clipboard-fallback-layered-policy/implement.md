@@ -14,8 +14,10 @@
 
 ## 3. 分离稳定判定，复用最终化
 
+- `singleWrite` 首次观察到的 generation 必须紧邻清空 generation，避免首次轮询前的外部写入被当成本次复制结果。
 - `singleWrite`：首写后短暂稳定检查，第二个 generation 保守返回 `clipboardChanged`。
 - `stagedWrite`：保留已验收的 120ms 可重置安静窗口。
+- 所有等待按 deadline 剩余时间截断，确保 650ms 总超时是硬上限。
 - 两种模式继续复用现有的内容分类、快照恢复、非文本清理与精确 generation 守卫。
 - 删除被新模式替代的统一等待常量或重复分支，不做无关重构。
 
