@@ -26,6 +26,7 @@
 - [x] `Scripts/verify-all.sh` 通过。
 - [x] `git diff --check` 通过。
 - [x] 生产代码无改动，diff 仅包含验证预算、对应规范和本 Trellis phase。
+- [x] GitHub Actions CI run `32925426757` 在提交 `277288d` 上通过。
 
 ## Out of Scope
 
