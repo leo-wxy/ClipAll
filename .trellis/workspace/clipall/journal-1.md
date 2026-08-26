@@ -236,3 +236,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 12: 修复超高选区浮窗贴顶
+
+**Date**: 2026-08-26
+**Task**: 修复超高选区浮窗贴顶
+**Branch**: `main`
+
+### Summary
+
+超高选区上下均无法容纳浮窗时回退到触发点定位；补充回归验证并完成稳定签名安装与真实 App 验收。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3ca89ac` | (see git log) |
+
+### Status
+
+[OK] **Completed**
