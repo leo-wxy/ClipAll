@@ -135,7 +135,6 @@ enum OverlayStateVerification {
 
         let fallback = ClipboardSelectionFallback(
             pasteboard: pasteboard,
-            timeout: .milliseconds(100),
             pollInterval: .milliseconds(1),
             stabilityDelay: .milliseconds(1),
             sendCopy: { _ in

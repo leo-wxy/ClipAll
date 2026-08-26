@@ -297,6 +297,9 @@ if executor.executionPresentation == .external {
   policy persistence, capture-before-
   policy rejection, source switching, explicit-capture bypass, fail-before-
   clear snapshot limits, and Carbon hot-key ID isolation.
+- Native `NSPasteboard` integration scenarios must use the production transaction
+  deadline. Keep shorter deterministic timeouts limited to in-memory pasteboard
+  tests so CI scheduling cannot turn restoration checks into timing flakes.
 - `swift build --target ClipAll` verifies AppKit/Carbon integration compiles.
 - Manual QA must use `/Applications/ClipAll.app`: test TextEdit drag, double
   click, retained-highlight single click, normal typing, registered shortcut,
