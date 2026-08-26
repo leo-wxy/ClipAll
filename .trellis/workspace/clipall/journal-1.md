@@ -257,3 +257,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 13: 修复 IDE 文件节点双击误触
+
+**Date**: 2026-08-26
+**Task**: 修复 IDE 文件节点双击误触
+**Branch**: `main`
+
+### Summary
+
+区分真正空 AX 路径与仅窗口根节点路径；保留 POPO 兼容取词，阻止 IDE 文件节点复制残留编辑器选区。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ef58fe1` | (see git log) |
+
+### Status
+
+[OK] **Completed**
