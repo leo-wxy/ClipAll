@@ -278,3 +278,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 14: 降低取词浮窗打扰感
+
+**Date**: 2026-09-16
+**Task**: 降低取词浮窗打扰感
+**Branch**: `main`
+
+### Summary
+
+为鼠标自动取词增加 120ms 可取消安静期，将浮窗统一收窄到 280pt，并按配置顺序保留前两个固定能力；稳定签名安装后用户确认体感改善。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `822cccc` | (see git log) |
+
+### Status
+
+[OK] **Completed**

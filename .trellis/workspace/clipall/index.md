@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 13
-- **Last Active**: 2026-08-26
+- **Total Sessions**: 14
+- **Last Active**: 2026-09-16
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~280 | Active |
+| `journal-1.md` | ~301 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 14 | 2026-09-16 | 降低取词浮窗打扰感 | `822cccc` | `main` |
 | 13 | 2026-08-26 | 修复 IDE 文件节点双击误触 | `ef58fe1` | `main` |
 | 12 | 2026-08-26 | 修复超高选区浮窗贴顶 | `3ca89ac` | `main` |
 | 11 | 2026-08-25 | 优化剪贴板回退分层策略 | `8e4adc3` | `main` |
