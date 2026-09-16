@@ -7,11 +7,11 @@ struct CapabilitiesSettingsView: View {
     var body: some View {
         ClipAllSettingsPage(
             "操作栏",
-            subtitle: "调整已固定能力的顺序；新的能力从所属插件详情中固定。"
+            subtitle: "调整固定能力顺序；前两个直接显示，其余从“更多”访问。"
         ) {
             ClipAllSettingsSection(
                 "浮窗预览",
-                subtitle: "复制始终在首位；能力顺序会实时同步到取词浮窗。"
+                subtitle: "复制与前两个固定能力直接显示；粘贴及其余能力在“更多”中。"
             ) {
                 toolbarPreview
             }
@@ -54,9 +54,8 @@ struct CapabilitiesSettingsView: View {
     private var toolbarPreview: some View {
         HStack(spacing: 0) {
             previewItem(title: "复制", symbolName: "doc.on.doc", isAccent: false)
-            previewItem(title: "粘贴", symbolName: "doc.on.clipboard", isAccent: false)
 
-            ForEach(settings.pinnedCapabilityIDs, id: \.self) { id in
+            ForEach(settings.pinnedCapabilityIDs.prefix(2), id: \.self) { id in
                 let descriptor = registry.descriptor(for: id)
                 previewItem(
                     title: descriptor?.name ?? id.rawValue,

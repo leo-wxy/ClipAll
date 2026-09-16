@@ -21,6 +21,7 @@ enum OverlayStateVerification {
         try verifyPointerSelectionGesture()
         try verifySelectionAutomaticDisplayPolicies()
         try await verifySelectionMonitorPolicyGate()
+        try await verifySelectionMonitorQuietPeriod()
         try await verifySelectionMonitorMultiClickPreflight()
         try verifySelectionHitClassifier()
         try verifySelectionFallbackPolicyWriteModes()
@@ -1020,6 +1021,51 @@ enum OverlayStateVerification {
             "缺少第二次按下预检时必须安全回退到严格门禁"
         )
         try expect(capture.preflightCallCount == 2, "只应预检双击或多击的按下事件")
+    }
+
+    private static func verifySelectionMonitorQuietPeriod() async throws {
+        try expect(
+            SelectionMonitor.automaticPointerCaptureDelay == .milliseconds(120),
+            "自动取词应保留 120ms 安静确认期"
+        )
+
+        let capture = VerificationSelectionCapture()
+        capture.sourceBundleIdentifier = "com.example.QuietPointer"
+        var selectionCount = 0
+        let monitor = SelectionMonitor(
+            captureService: capture,
+            shortcut: .standard,
+            frontmostBundleIdentifier: { capture.sourceBundleIdentifier },
+            onSelection: { _ in selectionCount += 1 }
+        )
+
+        monitor.capturePointerSelection(
+            .drag,
+            sourceBundleIdentifier: capture.sourceBundleIdentifier,
+            requiresRunning: false
+        )
+        monitor.handlePointerDown(at: .zero, clickCount: 1)
+        monitor.handlePointerUp(
+            at: .zero,
+            clickCount: 1,
+            isShiftPressed: false,
+            requiresRunning: false
+        )
+        try await Task.sleep(for: .milliseconds(150))
+        try expect(capture.callCount == 0, "安静期内的新鼠标操作应取消待捕获任务")
+        try expect(selectionCount == 0, "取消待捕获任务后不得发布浮窗")
+
+        monitor.capturePointerSelection(
+            .drag,
+            sourceBundleIdentifier: capture.sourceBundleIdentifier,
+            requiresRunning: false
+        )
+        try await waitUntil("安静期结束后未执行正常捕获") { capture.callCount == 1 }
+        try expect(selectionCount == 1, "没有后续操作时应正常发布选区")
+
+        monitor.captureNow()
+        monitor.handlePointerDown(at: .zero, clickCount: 1)
+        try await waitUntil("鼠标按下不应取消主动取词") { capture.callCount == 2 }
     }
 
     private static func waitUntil(

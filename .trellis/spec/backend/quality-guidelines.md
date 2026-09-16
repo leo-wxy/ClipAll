@@ -241,6 +241,9 @@ SelectionMonitor.capturePointerSelection(
 - Try bounded AX selection capture before clipboard fallback. AX success never
   sends `Command-C`.
 - A normal single click has no pointer selection intent and never captures.
+- Automatic pointer capture waits 120ms after mouse-up. A new mouse-down while
+  that task is pending cancels it as normal control flow; menu and registered
+  hotkey capture are not marked pointer-cancellable.
 - Global drag and multi-click switches default to enabled. Per-App automatic
   display policy is `followGlobal`, `dragOnly`, or `disabled`; it affects pointer
   capture only. Registered hotkey and menu capture bypass the pointer policy.
@@ -278,6 +281,7 @@ SelectionMonitor.capturePointerSelection(
 | Trigger / evidence | Required behavior |
 | --- | --- |
 | Normal single click | Do not capture or send copy |
+| New mouse-down during the pointer quiet period | Cancel the pending pointer capture without an error log |
 | Global pointer trigger disabled | Invalidate before AX or clipboard work |
 | App policy is `dragOnly` | Allow drag/Shift-click; reject multi-click |
 | App policy is `disabled` | Reject every pointer trigger; allow hotkey/menu capture |
@@ -320,6 +324,8 @@ SelectionMonitor.capturePointerSelection(
 ### 6. Tests Required
 
 - `Scripts/verify-overlay-state.sh` must assert:
+  - the 120ms pointer quiet period, cancellation by a new mouse-down, and normal
+    menu capture during pointer interaction;
   - empty hit paths allow compatible drag and multi-click fallback;
   - root-only `AXWindow` / `AXApplication` paths reject multi-click fallback;
   - known text surfaces allow fallback;

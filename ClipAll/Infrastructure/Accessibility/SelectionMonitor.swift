@@ -42,6 +42,8 @@ private let clipAllHotKeyHandler: EventHandlerUPP = { _, event, userData in
 
 @MainActor
 final class SelectionMonitor {
+    static let automaticPointerCaptureDelay: Duration = .milliseconds(120)
+
     private static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "com.wxy.ClipAll",
         category: "SelectionMonitor"
@@ -113,6 +115,7 @@ final class SelectionMonitor {
     private var hotKeyRef: EventHotKeyRef?
     private var hotKeyHandlerRef: EventHandlerRef?
     private var captureTask: Task<Void, Never>?
+    private var pointerCaptureToken: UUID?
     private var lastSignature: SelectionSignature?
     private var lastCaptureDate = Date.distantPast
 
@@ -181,6 +184,7 @@ final class SelectionMonitor {
         isRunning = false
         captureTask?.cancel()
         captureTask = nil
+        pointerCaptureToken = nil
         lastSignature = nil
         pointerGesture.reset()
         multiClickFallbackPolicy = nil
@@ -224,6 +228,11 @@ final class SelectionMonitor {
     }
 
     func handlePointerDown(at location: CGPoint, clickCount: Int) {
+        if pointerCaptureToken != nil {
+            captureTask?.cancel()
+            captureTask = nil
+            pointerCaptureToken = nil
+        }
         pointerGesture.begin(at: location)
         multiClickFallbackPolicy = clickCount >= 2
             ? captureService.preflightFallbackPolicy(for: .multiClick, at: location)
@@ -260,12 +269,13 @@ final class SelectionMonitor {
         sourceBundleIdentifier: String?,
         triggerLocation: CGPoint = NSEvent.mouseLocation,
         fallbackPolicy: SelectionFallbackPolicy? = nil,
-        after delay: Duration = .milliseconds(45),
+        after delay: Duration = SelectionMonitor.automaticPointerCaptureDelay,
         requiresRunning: Bool = true
     ) {
         guard isRunning || !requiresRunning else { return }
         captureTask?.cancel()
         captureTask = nil
+        pointerCaptureToken = nil
         let trigger = CaptureTrigger.pointer(
             intent,
             sourceBundleIdentifier: sourceBundleIdentifier,
@@ -277,7 +287,8 @@ final class SelectionMonitor {
             after: delay,
             allowsDuplicate: false,
             trigger: trigger,
-            requiresRunning: requiresRunning
+            requiresRunning: requiresRunning,
+            cancelsOnPointerDown: true
         )
     }
 
@@ -338,12 +349,20 @@ final class SelectionMonitor {
         after delay: Duration,
         allowsDuplicate: Bool,
         trigger: CaptureTrigger,
-        requiresRunning: Bool = true
+        requiresRunning: Bool = true,
+        cancelsOnPointerDown: Bool = false
     ) {
         guard isRunning || !requiresRunning else { return }
         captureTask?.cancel()
+        let captureToken = UUID()
+        pointerCaptureToken = cancelsOnPointerDown ? captureToken : nil
         captureTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            defer {
+                if self.pointerCaptureToken == captureToken {
+                    self.pointerCaptureToken = nil
+                }
+            }
             do {
                 if delay != .zero {
                     try await Task.sleep(for: delay)
@@ -361,6 +380,8 @@ final class SelectionMonitor {
                 guard validatePointerTrigger(trigger, context: context) else { return }
                 guard allowsDuplicate || shouldPublish(context) else { return }
                 onSelection(context)
+            } catch is CancellationError {
+                return
             } catch let error as SelectionCaptureError {
                 Self.logger.debug(
                     "Selection capture ended: trigger=\(trigger.name, privacy: .public), error=\(String(describing: error), privacy: .public)"

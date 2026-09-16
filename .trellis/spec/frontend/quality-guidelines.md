@@ -11,7 +11,12 @@
 
 ## Selection Overlay Contract
 
-- The overlay width is fixed at 324 points in compact and expanded states.
+- The overlay width is fixed at 280 points in compact and expanded states.
+- The compact action bar shows Copy plus the first two configured pinned
+  capabilities. Paste and any remaining pinned capabilities stay reachable at
+  the top of More; the persisted four-item order remains unchanged.
+- Compact capability labels may tighten or truncate at 280 points, but every
+  action keeps its full hover help and accessibility label.
 - Ordinary mode stays a non-activating `NSPanel`; only the search state accepts
   keyboard input.
 - Expanding discovery must not automatically focus the search field or call
@@ -158,6 +163,9 @@ if executor.executionPresentation == .external {
 - Pointer auto-capture runs only after a drag at least four points, a mouse-up
   with `clickCount >= 2`, or Shift-click. A plain click never reads a retained
   old selection.
+- Pointer auto-capture waits 120ms after mouse-up. A new mouse-down during that
+  window cancels the pending pointer capture without logging an error or
+  affecting menu and registered-hotkey capture.
 - Settings opens on the dedicated `取词` section. It owns the monitoring master,
   drag and multi-click switches, per-App policy, fixed-filter explanation, and
   compatibility fallback. The floating panel and menu bar do not edit these
@@ -230,6 +238,7 @@ if executor.executionPresentation == .external {
 | Frontmost App changes after mouse-up | Invalidate before publishing any selection |
 | Drag below four points | No capture |
 | Drag at least four points | Capture after the short selection-settle delay |
+| New mouse-down during the 120ms pointer quiet period | Cancel the pending capture; publish nothing |
 | Drag over an AX-opaque custom text surface or empty hit path | Try compatibility copy; publish only validated text and restore the clipboard |
 | Drag over a known image/control target | Reject before `⌘C`; preserve the clipboard |
 | Drag copy produces a typed non-text object | Reject; settle repeated writes; restore original text or clear original non-text; no overlay |
@@ -291,7 +300,8 @@ if executor.executionPresentation == .external {
 ### 6. Tests Required
 
 - `Scripts/verify-overlay-state.sh` asserts explicit gesture rules, fallback
-  success, equal-text detection, multi-type restore, timeout, cancellation,
+  success, pointer quiet-period cancellation, active-capture preservation,
+  equal-text detection, multi-type restore, timeout, cancellation,
   concurrent clipboard changes, compatible drag for empty/custom AX paths,
   second-mouse-down multi-click preflight propagation, safe missing-preflight
   fallback, empty-path compatible policy, root-only-path strict policy, AX hit

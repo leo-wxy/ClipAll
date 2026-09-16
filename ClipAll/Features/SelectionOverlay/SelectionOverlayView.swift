@@ -4,7 +4,7 @@ import SwiftUI
 
 @MainActor
 struct SelectionOverlayView: View {
-    static let expandedWidth: CGFloat = 324
+    static let expandedWidth: CGFloat = 280
 
     @ObservedObject var store: SelectionOverlayStore
     let onToggleMore: () -> Void
@@ -69,16 +69,7 @@ struct SelectionOverlayView: View {
                 action: store.copySelection
             )
 
-            OverlayActionButton(
-                title: "粘贴",
-                symbolName: "doc.on.clipboard",
-                isLoading: false,
-                isActive: false,
-                isCapability: false,
-                action: store.pasteClipboard
-            )
-
-            ForEach(store.fixedCapabilities) { capability in
+            ForEach(store.fixedCapabilities.prefix(2)) { capability in
                 OverlayActionButton(
                     title: capability.name,
                     symbolName: capability.symbolName,
@@ -194,6 +185,31 @@ struct SelectionOverlayView: View {
 
     private var moreCapabilities: some View {
         VStack(spacing: 8) {
+            VStack(spacing: 3) {
+                OverlayActionButton(
+                    title: "粘贴",
+                    symbolName: "doc.on.clipboard",
+                    isLoading: false,
+                    isActive: false,
+                    isCapability: false
+                ) {
+                    store.hideMore()
+                    store.pasteClipboard()
+                }
+
+                ForEach(store.fixedCapabilities.dropFirst(2)) { capability in
+                    OverlayActionButton(
+                        title: capability.name,
+                        symbolName: capability.symbolName,
+                        isLoading: isExecuting(capability.id),
+                        isActive: activeCapabilityID == capability.id,
+                        isCapability: true
+                    ) {
+                        store.execute(capability.id)
+                    }
+                }
+            }
+
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
@@ -412,13 +428,14 @@ private struct OverlayActionButton: View {
                 Text(title)
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
+                    .minimumScaleFactor(0.85)
             }
             .padding(.horizontal, 7)
             .frame(maxWidth: .infinity, minHeight: 28)
             .contentShape(Rectangle())
         }
         .buttonStyle(OverlayChromeButtonStyle(isActive: isActive))
+        .help(title)
         .accessibilityAddTraits(isActive ? .isSelected : [])
         .accessibilityLabel(title)
     }
